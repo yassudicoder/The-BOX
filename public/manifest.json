@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "AI Conversation Portability",
+  "version": "0.0.1",
+  "description": "Capture, compress, and transfer AI conversations between ChatGPT and Claude.",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "sidePanel", "scripting", "activeTab"],
+  "host_permissions": [
+    "https://chat.openai.com/*",
+    "https://chatgpt.com/*",
+    "https://claude.ai/*"
+  ],
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "action": {
+    "default_title": "Open AI Conversation Portability"
+  },
+  "icons": {
+    "16": "icons/icon16.svg",
+    "48": "icons/icon48.svg",
+    "128": "icons/icon128.svg"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/fullview/index.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head><title>Claude</title></head>
+  <body>
+    <main>
+      <div data-testid="conversation-turn-1" class="group/conversation-turn">
+        <div data-testid="user-message">
+          <p>Make me a React counter component.</p>
+        </div>
+        <div data-testid="conversation-turn-assistant" class="font-claude-message">
+          <p>Here's a simple counter:</p>
+          <div data-testid="artifact-card" data-artifact-id="art-counter" data-artifact-language="tsx" data-artifact-mime="application/vnd.ant.react">
+            <div data-testid="artifact-title">Counter component</div>
+            <pre><code class="language-tsx">import { useState } from 'react';
+
+export function Counter() {
+  const [n, setN] = useState(0);
+  return &lt;button onClick={() =&gt; setN(n + 1)}&gt;{n}&lt;/button&gt;;
+}</code></pre>
+          </div>
+          <p>Click the button to increment.</p>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <head><title>ChatGPT</title></head>
+  <body>
+    <main>
+      <article data-message-author-role="user" data-message-id="msg-1">
+        <div class="whitespace-pre-wrap">Write a quicksort in TypeScript.</div>
+      </article>
+      <article data-message-author-role="assistant" data-message-id="msg-2">
+        <div class="markdown">
+          <p>Here is a simple implementation:</p>
+          <pre><code class="language-ts hljs">function quicksort(arr: number[]): number[] {
+  if (arr.length &lt;= 1) return arr;
+  const [p, ...rest] = arr;
+  const less = rest.filter(x =&gt; x &lt; p);
+  const more = rest.filter(x =&gt; x &gt;= p);
+  return [...quicksort(less), p, ...quicksort(more)];
+}</code></pre>
+          <p>Note: this is <em>not</em> in-place.</p>
+        </div>
+      </article>
+      <article data-message-author-role="user" data-message-id="msg-3">
+        <div class="whitespace-pre-wrap">Make it in-place.</div>
+      </article>
+      <article data-message-author-role="assistant" data-message-id="msg-4">
+        <div class="markdown">
+          <p>Sure:</p>
+          <pre><code class="language-ts">function quicksortInPlace(arr: number[], lo = 0, hi = arr.length - 1): void {
+  if (lo &gt;= hi) return;
+  const pivot = arr[hi]!;
+  let i = lo;
+  for (let j = lo; j &lt; hi; j++) {
+    if (arr[j]! &lt; pivot) {
+      [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+      i++;
+    }
+  }
+  [arr[i], arr[hi]] = [arr[hi]!, arr[i]!];
+  quicksortInPlace(arr, lo, i - 1);
+  quicksortInPlace(arr, i + 1, hi);
+}</code></pre>
+        </div>
+      </article>
+    </main>
+  </body>
+</html>

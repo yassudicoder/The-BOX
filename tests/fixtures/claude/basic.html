@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head><title>Claude</title></head>
+  <body>
+    <main>
+      <div data-testid="conversation-turn-1" class="group/conversation-turn">
+        <div data-testid="user-message">
+          <p>Explain monads in one paragraph.</p>
+        </div>
+        <div data-testid="conversation-turn-assistant" class="font-claude-message">
+          <p>A monad is a design pattern that wraps a value and provides a way to chain computations on it without exposing the wrapping. Concretely you need three pieces: a type constructor <code>M&lt;T&gt;</code>, a <code>unit</code> (or <code>return</code>) that lifts a plain value into the monad, and a <code>bind</code> (or <code>flatMap</code>) that takes a wrapped value and a function returning another wrapped value and produces a new wrapped value. The pattern matters because it lets you compose effectful computations — failure, async, state — using ordinary function-application syntax.</p>
+        </div>
+      </div>
+      <div data-testid="conversation-turn-2" class="group/conversation-turn">
+        <div data-testid="user-message">
+          <p>Show a Maybe monad in TypeScript.</p>
+        </div>
+        <div data-testid="conversation-turn-assistant" class="font-claude-message">
+          <p>Here:</p>
+          <pre><code class="language-ts">type Maybe&lt;T&gt; = { kind: 'some'; value: T } | { kind: 'none' };
+const some = &lt;T&gt;(v: T): Maybe&lt;T&gt; =&gt; ({ kind: 'some', value: v });
+const none: Maybe&lt;never&gt; = { kind: 'none' };
+const bind = &lt;A, B&gt;(m: Maybe&lt;A&gt;, f: (a: A) =&gt; Maybe&lt;B&gt;): Maybe&lt;B&gt; =&gt;
+  m.kind === 'none' ? m : f(m.value);</code></pre>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
