@@ -6,44 +6,46 @@ const TAXONOMY: Record<WarningCode, Omit<Warning, 'code'>> = {
     title: 'No user message to continue from',
     explanation:
       'The captured conversation has no user turn. The receiving model has nothing concrete to act on.',
-    recommendedAction: 'Provide a continuation instruction before transferring.',
+    recommendedAction: 'Fill in "What should the next AI do?" before copying.',
   },
   budget_unmet: {
     severity: 'warning',
-    title: 'Prompt exceeds target tokens',
+    title: 'Prompt is over target size',
     explanation:
-      'After compression and final rendering, the prompt is over the chosen token budget.',
+      'After compression and final rendering, the prompt is larger than the target prompt size you chose.',
     recommendedAction:
-      'Lower "Keep last K turns", reduce the recent window, or raise the target budget.',
+      'Open Advanced settings and either raise the target prompt size or uncheck a section in Include.',
   },
   digest_only: {
     severity: 'warning',
-    title: 'No verbatim recent exchange',
+    title: 'No recent turns kept word-for-word',
     explanation:
-      'The receiving model will see only compressed summaries. Continuity may degrade.',
-    recommendedAction: 'Increase "Keep last K turns" to include at least one full exchange.',
+      'The receiving model will see only shortened summaries. Continuity may degrade.',
+    recommendedAction:
+      'Open Advanced settings and raise "Keep last N turns word-for-word" to at least 2.',
   },
   extraction_partial: {
     severity: 'warning',
-    title: 'Extraction may be incomplete',
+    title: 'Capture may be incomplete',
     explanation:
-      'Virtualization detection suggests some earlier messages may not have been captured.',
+      'Some earlier messages may not have been captured (the page may load older turns only on scroll).',
     recommendedAction:
-      'Scroll to the very top of the source conversation and re-capture.',
+      'Scroll to the very top of the source conversation and capture again.',
   },
   low_confidence: {
     severity: 'warning',
-    title: 'Low extraction confidence',
+    title: 'Low capture confidence',
     explanation:
-      'Several DOM selectors missed or the page fingerprint changed. The extracted conversation may be wrong.',
-    recommendedAction: 'Review the timeline carefully before transferring.',
+      'Several page selectors missed or the page layout changed. The captured conversation may be wrong.',
+    recommendedAction: 'Open Review to check the captured messages before copying.',
   },
   all_dropped_by_compose: {
     severity: 'blocker',
-    title: 'Compose filters left nothing to send',
+    title: 'Nothing left to send',
     explanation:
-      'Your section toggles excluded every message. The receiving model would see only metadata.',
-    recommendedAction: 'Re-enable at least one section, or restore a dropped message.',
+      'Your Include checkboxes excluded every message. The receiving model would see only metadata.',
+    recommendedAction:
+      'Open Advanced settings and re-enable at least one section under Include.',
   },
 };
 

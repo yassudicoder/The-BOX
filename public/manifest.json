@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "AI Conversation Portability",
-  "version": "0.0.1",
-  "description": "Capture, compress, and transfer AI conversations between ChatGPT and Claude.",
+  "name": "Continue AI — Move your AI chat across ChatGPT, Claude & Gemini",
+  "short_name": "Continue AI",
+  "version": "1.0.0",
+  "description": "Move an AI chat between ChatGPT, Claude, and Gemini. Your conversation only goes to another AI when you choose to send it there.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "sidePanel", "scripting", "activeTab"],
+  "permissions": ["storage", "sidePanel", "scripting"],
   "host_permissions": [
-    "https://chat.openai.com/*",
     "https://chatgpt.com/*",
-    "https://claude.ai/*"
+    "https://claude.ai/*",
+    "https://gemini.google.com/*"
   ],
   "background": {
     "service_worker": "src/background/index.ts",
@@ -18,17 +19,15 @@
     "default_path": "src/sidepanel/index.html"
   },
   "action": {
-    "default_title": "Open AI Conversation Portability"
+    "default_title": "Open Continue AI"
   },
   "icons": {
-    "16": "icons/icon16.svg",
-    "48": "icons/icon48.svg",
-    "128": "icons/icon128.svg"
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
-  "web_accessible_resources": [
-    {
-      "resources": ["src/fullview/index.html"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self';"
+  }
 }

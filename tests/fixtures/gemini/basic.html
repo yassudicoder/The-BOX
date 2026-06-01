@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head><title>Explain monads - Google Gemini</title></head>
+  <body>
+    <bard-sidenav-content>
+      <div class="mdc-list-item--activated">
+        <span class="title-text">Explain monads</span>
+      </div>
+    </bard-sidenav-content>
+    <chat-window-content>
+      <div class="conversation-container" id="70eca5bdaf4f3d32">
+        <user-query>
+          <user-query-content>
+            <div class="query-text">
+              <span class="cdk-visually-hidden screen-reader-user-query-label">You said</span>
+              <p class="query-text-line">Explain monads in one paragraph.</p>
+            </div>
+          </user-query-content>
+        </user-query>
+        <model-response>
+          <message-content>
+            <div class="markdown markdown-main-panel">
+              <p>A monad is a design pattern that wraps a value and provides a way to chain computations on it without exposing the wrapping. You need three pieces: a type constructor <code>M&lt;T&gt;</code>, a <code>unit</code>, and a <code>bind</code>.</p>
+            </div>
+          </message-content>
+        </model-response>
+      </div>
+      <div class="conversation-container" id="a1b2c3d4e5f60718">
+        <user-query>
+          <user-query-content>
+            <div class="query-text">
+              <p class="query-text-line">Show a Maybe monad in TypeScript.</p>
+            </div>
+          </user-query-content>
+        </user-query>
+        <model-response>
+          <message-content>
+            <div class="markdown markdown-main-panel">
+              <p>Here:</p>
+              <pre><code class="language-ts">type Maybe&lt;T&gt; = { kind: 'some'; value: T } | { kind: 'none' };
+const some = &lt;T&gt;(v: T): Maybe&lt;T&gt; =&gt; ({ kind: 'some', value: v });
+const none: Maybe&lt;never&gt; = { kind: 'none' };
+const bind = &lt;A, B&gt;(m: Maybe&lt;A&gt;, f: (a: A) =&gt; Maybe&lt;B&gt;): Maybe&lt;B&gt; =&gt;
+  m.kind === 'none' ? m : f(m.value);</code></pre>
+            </div>
+          </message-content>
+        </model-response>
+      </div>
+    </chat-window-content>
+    <div class="logo-pill-label-container">
+      <button aria-label="Open mode picker, currently Gemini Flash-Lite">
+        <span class="picker-primary-text">Gemini</span>
+        <span class="picker-secondary-text">Flash-Lite</span>
+      </button>
+    </div>
+  </body>
+</html>

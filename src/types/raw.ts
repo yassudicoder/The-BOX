@@ -26,6 +26,7 @@ export type ExtractionErrorReason =
   | 'selectors_missed'
   | 'virtualization_failed'
   | 'permission_denied'
+  | 'storage_full'
   | 'unknown';
 
 export class ExtractionError extends Error {

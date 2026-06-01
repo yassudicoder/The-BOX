@@ -10,9 +10,9 @@ const ctx = {
 };
 
 describe('ChatGPTAdapter', () => {
-  it('matches chat.openai.com and chatgpt.com', () => {
-    expect(adapter.matches(new URL('https://chat.openai.com/c/abc'))).toBe(true);
+  it('matches chatgpt.com only (chat.openai.com server-redirects there)', () => {
     expect(adapter.matches(new URL('https://chatgpt.com/c/abc'))).toBe(true);
+    expect(adapter.matches(new URL('https://chat.openai.com/c/abc'))).toBe(false);
     expect(adapter.matches(new URL('https://claude.ai/'))).toBe(false);
   });
 

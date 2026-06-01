@@ -54,15 +54,15 @@ export function statusOf(p: Provenance): ProvenanceStatus {
 export function labelOf(status: ProvenanceStatus): string {
   switch (status) {
     case 'verbatim':
-      return 'Verbatim';
+      return 'Kept as-is';
     case 'instruction':
-      return 'Instruction';
+      return 'Pinned';
     case 'summarized':
-      return 'Summarized';
+      return 'Shortened';
     case 'dropped':
-      return 'Dropped';
+      return 'Trimmed';
     case 'synthetic':
-      return 'Synthetic';
+      return 'Transfer note';
   }
 }
 
@@ -70,15 +70,15 @@ export function explanationOf(p: Provenance, reason?: VerbatimReason): string {
   switch (p.kind) {
     case 'verbatim':
       if (p.reason === 'instruction')
-        return 'Standing instruction — preserved regardless of position';
-      if (p.reason === 'recent') return 'In the recent window — kept verbatim';
-      return 'Kept verbatim';
+        return 'Pinned instruction — kept regardless of position';
+      if (p.reason === 'recent') return 'In recent window — kept word-for-word';
+      return 'Kept word-for-word';
     case 'summarized':
-      return `Summarized; ${p.droppedBlockCount} block(s) elided`;
+      return `Shortened; ${p.droppedBlockCount} block(s) removed`;
     case 'dropped':
-      return `Dropped — ${p.reason}`;
+      return `Set aside — ${p.reason}`;
     case 'synthetic':
-      return `Synthetic — ${p.reason}`;
+      return `Transfer note — ${p.reason}`;
   }
   void reason;
 }

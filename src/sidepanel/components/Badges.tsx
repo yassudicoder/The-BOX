@@ -1,13 +1,18 @@
 import React from 'react';
 import type { ProvenanceStatus } from '../../core/provenance';
 
+// Borderless pills. Color tint carries identity; no walls. Red is still
+// reserved for genuine alarm (warnings, overflow) — 'dropped' is slate.
 const STYLE: Record<ProvenanceStatus, string> = {
-  verbatim: 'border-neutral-700 bg-neutral-900 text-neutral-300',
-  instruction: 'border-amber-700 bg-amber-950/60 text-amber-200',
-  summarized: 'border-sky-800 bg-sky-950/60 text-sky-200',
-  dropped: 'border-rose-900 bg-rose-950/60 text-rose-200',
-  synthetic: 'border-neutral-700 bg-neutral-900 text-neutral-400',
+  verbatim: 'bg-neutral-500/10 text-neutral-200',
+  instruction: 'bg-amber-500/10 text-amber-200',
+  summarized: 'bg-sky-500/10 text-sky-200',
+  dropped: 'bg-slate-500/10 text-slate-300',
+  synthetic: 'bg-neutral-500/10 text-neutral-300',
 };
+
+const PILL_BASE =
+  'rounded-full px-2 py-0.5 text-[10.5px] font-medium tracking-wide';
 
 export const StatusBadge = React.memo(function StatusBadge({
   status,
@@ -16,18 +21,12 @@ export const StatusBadge = React.memo(function StatusBadge({
   status: ProvenanceStatus;
   label: string;
 }): JSX.Element {
-  return (
-    <span
-      className={`rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${STYLE[status]}`}
-    >
-      {label}
-    </span>
-  );
+  return <span className={`${PILL_BASE} ${STYLE[status]}`}>{label}</span>;
 });
 
 export function ArtifactBadge(): JSX.Element {
   return (
-    <span className="rounded border border-violet-800 bg-violet-950/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-200">
+    <span className={`${PILL_BASE} bg-violet-500/10 text-violet-200`}>
       Artifact
     </span>
   );
@@ -36,7 +35,7 @@ export function ArtifactBadge(): JSX.Element {
 export function PassBadge({ pass }: { pass: string | null }): JSX.Element | null {
   if (!pass) return null;
   return (
-    <span className="rounded border border-neutral-800 bg-neutral-950 px-1.5 py-0.5 text-[10px] font-mono text-neutral-400">
+    <span className="rounded-full bg-white/5 px-2 py-0.5 font-mono text-[10.5px] text-neutral-400">
       {pass}
     </span>
   );
@@ -49,14 +48,16 @@ export function TokensBadge({
   tokens: number;
   delta: number | null;
 }): JSX.Element {
+  // Positive framing for the common case (delta < 0 = compression saved tokens).
+  // Subdued neutral; reserved red is only for genuine problems.
   return (
-    <span className="ml-auto text-[10px] tabular-nums text-neutral-400">
-      ~{tokens}t{delta !== null && delta !== 0 && (
-        <span className={delta < 0 ? 'text-emerald-400' : 'text-rose-400'}>
-          {' '}
-          ({delta > 0 ? '+' : ''}
-          {delta})
-        </span>
+    <span className="ml-auto text-[11px] tabular-nums text-neutral-500">
+      ~{tokens}t
+      {delta !== null && delta < 0 && (
+        <span className="ml-1">· saved ~{-delta}t</span>
+      )}
+      {delta !== null && delta > 0 && (
+        <span className="ml-1">· +{delta}t</span>
       )}
     </span>
   );

@@ -10,8 +10,25 @@ import {
 import { computeSectionTotals, viewBudget } from '../../pipeline/tokens/sections';
 import type { SectionTotals, TokenBudgetView } from '../../pipeline/tokens/sections';
 import type { Warning } from '../../core/warnings';
+import {
+  chromeLocalDriver,
+  clearAllCaptures,
+  getStoredCount,
+} from '../../background/storage';
 
 export type Status = 'idle' | 'capturing' | 'ready' | 'error';
+
+/**
+ * Default token budget per transfer target. Declared as a Record (not a
+ * function with a default branch) so the type system errors at the
+ * declaration site when the Platform union grows — that's load-bearing
+ * for the "Platform union widens cleanly" invariant.
+ */
+export const TARGET_DEFAULT_BUDGETS: Record<Platform, number> = {
+  chatgpt: 32_000,
+  claude: 32_000,
+  gemini: 64_000,
+};
 
 export interface SidepanelState {
   status: Status;
@@ -23,6 +40,13 @@ export interface SidepanelState {
   target: Platform;
   recentTurnsVerbatim: number;
   targetTokens: number;
+  /**
+   * Tracks whether the user has manually edited the target-tokens input.
+   * While false, switching `target` updates `targetTokens` to the new
+   * target's default. Once true, the user's value sticks across target
+   * switches. In-memory only; not persisted (matches compose-state pattern).
+   */
+  targetTokensUserModified: boolean;
   nextInstruction: string;
 
   compose: ComposeState;
@@ -32,6 +56,9 @@ export interface SidepanelState {
   warnings: Warning[];
   totals: SectionTotals;
   budget: TokenBudgetView | null;
+
+  /** Count of captures persisted in chrome.storage.local. null = not yet loaded. */
+  storedCount: number | null;
 
   // intents
   setStatus(s: Status): void;
@@ -46,6 +73,10 @@ export interface SidepanelState {
   setMessageRestored(id: string, restored: boolean): void;
   /** Recompute compressed + prompt. Cheap; called whenever compose changes. */
   recompute(): void;
+  /** Read the stored-captures count from chrome.storage.local. */
+  refreshStoredCount(): Promise<void>;
+  /** Destructive: remove every persisted capture + the index. */
+  clearStoredCaptures(): Promise<void>;
 }
 
 export const useSidepanel = create<SidepanelState>((set, get) => ({
@@ -57,7 +88,8 @@ export const useSidepanel = create<SidepanelState>((set, get) => ({
 
   target: 'claude',
   recentTurnsVerbatim: 4,
-  targetTokens: 8000,
+  targetTokens: TARGET_DEFAULT_BUDGETS.claude,
+  targetTokensUserModified: false,
   nextInstruction: '',
 
   compose: emptyCompose(),
@@ -67,6 +99,8 @@ export const useSidepanel = create<SidepanelState>((set, get) => ({
   warnings: [],
   totals: { handoff: 0, digest: 0, recent: 0, continuation: 0, total: 0 },
   budget: null,
+
+  storedCount: null,
 
   setStatus: (s) => set({ status: s }),
   setError: (e) => set({ error: e }),
@@ -86,9 +120,14 @@ export const useSidepanel = create<SidepanelState>((set, get) => ({
       return;
     }
     const target: Platform = c.source.platform === 'claude' ? 'chatgpt' : 'claude';
+    const { targetTokensUserModified, targetTokens } = get();
+    const nextTokens = targetTokensUserModified
+      ? targetTokens
+      : TARGET_DEFAULT_BUDGETS[target];
     set({
       conv: c,
       target,
+      targetTokens: nextTokens,
       compose: emptyCompose(),
       compressed: null,
       status: 'ready',
@@ -98,7 +137,11 @@ export const useSidepanel = create<SidepanelState>((set, get) => ({
   },
 
   setTarget: (p) => {
-    set({ target: p });
+    const { targetTokensUserModified, targetTokens } = get();
+    const nextTokens = targetTokensUserModified
+      ? targetTokens
+      : TARGET_DEFAULT_BUDGETS[p];
+    set({ target: p, targetTokens: nextTokens });
     get().recompute();
   },
   setRecentTurnsVerbatim: (n) => {
@@ -106,7 +149,7 @@ export const useSidepanel = create<SidepanelState>((set, get) => ({
     get().recompute();
   },
   setTargetTokens: (n) => {
-    set({ targetTokens: Math.max(500, n) });
+    set({ targetTokens: Math.max(500, n), targetTokensUserModified: true });
     get().recompute();
   },
   setNextInstruction: (s) => {
@@ -169,5 +212,20 @@ export const useSidepanel = create<SidepanelState>((set, get) => ({
       totals,
       budget,
     });
+  },
+
+  refreshStoredCount: async () => {
+    try {
+      const n = await getStoredCount(chromeLocalDriver());
+      set({ storedCount: n });
+    } catch {
+      // Storage read failure is rare in practice; leaving storedCount at its
+      // previous value rather than spuriously changing the displayed number.
+    }
+  },
+
+  clearStoredCaptures: async () => {
+    await clearAllCaptures(chromeLocalDriver());
+    set({ storedCount: 0 });
   },
 }));

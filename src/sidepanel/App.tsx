@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Platform } from '../types/conversation';
 import type { Msg } from '../messaging/contracts';
 import { useSidepanel } from './state/store';
@@ -7,8 +7,17 @@ import { Timeline } from './components/Timeline';
 import { ComposeControls } from './components/ComposeControls';
 import { TokenBar } from './components/TokenBar';
 import { WarningStack } from './components/WarningBanner';
+import { CaptureStatus } from './components/CaptureStatus';
+import { CopyButton } from './components/CopyButton';
+import { TrimNotice } from './components/TrimNotice';
+import { nextBudgetTier } from './components/TrimNotice.helpers';
+import { HelpTip, HelpTipProvider } from './components/HelpTip';
+import { strings } from './strings';
 import { exportMarkdown } from '../export/markdown';
 import { buildBundle, bundleToJson } from '../export/json';
+
+const INPUT_CLASS =
+  'rounded-md border border-white/5 bg-neutral-950/40 px-3 py-2 text-[13px] text-neutral-100 placeholder:text-neutral-500 focus:border-blue-500/60 focus:outline-none';
 
 export function App(): JSX.Element {
   const status = useSidepanel((s) => s.status);
@@ -31,13 +40,47 @@ export function App(): JSX.Element {
   const setRecent = useSidepanel((s) => s.setRecentTurnsVerbatim);
   const setTargetTokens = useSidepanel((s) => s.setTargetTokens);
   const setNext = useSidepanel((s) => s.setNextInstruction);
+  const storedCount = useSidepanel((s) => s.storedCount);
+  const refreshStoredCount = useSidepanel((s) => s.refreshStoredCount);
+  const clearStoredCaptures = useSidepanel((s) => s.clearStoredCaptures);
 
   const [showDebug, setShowDebug] = useState(false);
   const [titleClicks, setTitleClicks] = useState(0);
 
+  // Refs used by the "Increase to <next tier>" action in TrimNotice — when
+  // fired we open the Advanced disclosure and select the budget input so the
+  // user can see what changed.
+  const advancedRef = useRef<HTMLDetailsElement>(null);
+  const budgetInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
-    document.title = 'AI Conversation Portability';
-  }, []);
+    document.title = 'Continue AI';
+    void refreshStoredCount();
+  }, [refreshStoredCount]);
+
+  async function handleClearStored(): Promise<void> {
+    // Free the storage without throwing away the user's current in-memory
+    // capture — they may want to copy the prompt before reloading.
+    await clearStoredCaptures();
+    // The action resolved the most likely cause of any visible error banner
+    // (storage_full). Clear it so the user sees the cleared state.
+    setError(null);
+  }
+
+  function handleIncreaseBudget(): void {
+    const next = nextBudgetTier(targetTokens);
+    if (next === null) return;
+    setTargetTokens(next);
+    if (advancedRef.current) advancedRef.current.open = true;
+    // Defer focus so React's re-render + the <details> open completes first.
+    window.setTimeout(() => {
+      const el = budgetInputRef.current;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }, 0);
+  }
 
   async function capture(): Promise<void> {
     setStatus('capturing');
@@ -75,173 +118,414 @@ export function App(): JSX.Element {
     URL.revokeObjectURL(url);
   }
 
+  const isCapturing = status === 'capturing';
+  const hasResult = conv !== null && compressed !== null;
+
   return (
-    <div className="flex h-full flex-col gap-3 p-3 text-sm">
-      <header>
-        <h1
-          className="cursor-default select-none text-base font-semibold"
-          onClick={() => {
-            const next = titleClicks + 1;
-            setTitleClicks(next);
-            if (next >= 5) setShowDebug(true);
-          }}
-        >
-          Conversation Portability
-        </h1>
-        <p className="text-xs text-neutral-400">Phase 5 — provenance-first transfer.</p>
-      </header>
-
-      <button
-        onClick={capture}
-        disabled={status === 'capturing'}
-        className="rounded bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-      >
-        {status === 'capturing' ? 'Capturing…' : 'Capture current conversation'}
-      </button>
-
-      {error && (
-        <p className="rounded border border-red-700 bg-red-950 p-2 text-xs text-red-200">
-          {error}
-        </p>
-      )}
-
-      {conv && compressed && (
-        <>
-          <fieldset className="grid grid-cols-2 gap-2 rounded border border-neutral-800 p-2 text-xs">
-            <label className="flex flex-col gap-1">
-              <span className="text-neutral-400">Target</span>
-              <select
-                value={target}
-                onChange={(e) => setTarget(e.target.value as Platform)}
-                className="rounded bg-neutral-900 px-2 py-1"
-              >
-                {listTransferTargets().map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-neutral-400">Keep last K turns</span>
-              <input
-                type="number"
-                min={0}
-                max={20}
-                value={recentTurnsVerbatim}
-                onChange={(e) => setRecent(Number(e.target.value))}
-                className="rounded bg-neutral-900 px-2 py-1"
-              />
-            </label>
-            <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-neutral-400">Target tokens</span>
-              <input
-                type="number"
-                min={500}
-                step={500}
-                value={targetTokens}
-                onChange={(e) => setTargetTokens(Number(e.target.value))}
-                className="rounded bg-neutral-900 px-2 py-1"
-              />
-            </label>
-            <label className="col-span-2 flex flex-col gap-1">
-              <span className="text-neutral-400">
-                Continuation (blank = last user message verbatim)
-              </span>
-              <textarea
-                value={nextInstruction}
-                onChange={(e) => setNext(e.target.value)}
-                rows={2}
-                className="rounded bg-neutral-900 px-2 py-1"
-              />
-            </label>
-          </fieldset>
-
-          <ComposeControls />
-
-          {budget && <TokenBar totals={totals} budget={budget} />}
-
-          <WarningStack warnings={warnings} />
-
-          <details open className="rounded border border-neutral-800">
-            <summary className="cursor-pointer p-2 text-xs text-neutral-400">
-              Timeline ({compressed.messages.length} messages)
-            </summary>
-            <div className="max-h-96 overflow-auto p-2">
-              <Timeline source={conv} compressed={compressed} />
-            </div>
-          </details>
-
-          <section className="flex flex-col gap-2">
-            <div className="flex items-center justify-between text-xs text-neutral-400">
-              <span>Transfer prompt (editable)</span>
-              <div className="flex gap-2">
-                <button className="text-blue-400 underline" onClick={openFullView}>
-                  open full view
-                </button>
-                <button
-                  className="text-blue-400 underline"
-                  onClick={() => navigator.clipboard.writeText(prompt)}
-                >
-                  copy
-                </button>
-              </div>
-            </div>
-            <textarea
-              value={prompt}
-              onChange={(e) => {
-                // Editing the prompt directly is a power-user override; we
-                // don't propagate it back into compressed state.
-                useSidepanel.setState({ prompt: e.target.value });
+    <HelpTipProvider>
+      <div className="flex h-full flex-col gap-6 px-4 pt-4 pb-6 text-sm">
+        <header className="flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <h1
+              className="cursor-default select-none text-[15px] font-semibold tracking-tight text-neutral-100"
+              onClick={() => {
+                const next = titleClicks + 1;
+                setTitleClicks(next);
+                if (next >= 5) setShowDebug(true);
               }}
-              className="min-h-48 rounded bg-neutral-900 p-2 font-mono text-xs"
-            />
-          </section>
-
-          <section className="flex flex-wrap gap-2 text-xs">
-            <button
-              className="rounded border border-neutral-700 px-2 py-1 hover:bg-neutral-900"
-              onClick={() => downloadFile('conversation.md', exportMarkdown(conv))}
             >
-              Export markdown
-            </button>
-            <button
-              className="rounded border border-neutral-700 px-2 py-1 hover:bg-neutral-900"
-              onClick={() =>
-                downloadFile(
-                  'bundle.json',
-                  bundleToJson(
-                    buildBundle({
-                      conversation: conv,
-                      compressed,
-                      warnings,
-                    })
-                  )
-                )
-              }
-            >
-              Export JSON bundle
-            </button>
-          </section>
-        </>
-      )}
-
-      {showDebug && conv?.extractionLog && (
-        <section className="rounded border border-amber-800 bg-amber-950/40 p-2 text-xs">
-          <div className="mb-1 flex items-center justify-between">
-            <strong>extraction log</strong>
-            <button
-              className="text-amber-300 underline"
-              onClick={() => navigator.clipboard.writeText(JSON.stringify(conv.extractionLog, null, 2))}
-            >
-              copy
-            </button>
+              Continue AI
+            </h1>
+            {hasResult && (
+              <button
+                type="button"
+                onClick={capture}
+                disabled={isCapturing}
+                aria-label={isCapturing ? 'Capturing…' : 'Re-capture this page'}
+                title={isCapturing ? 'Capturing…' : 'Re-capture this page'}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-500 transition-colors hover:bg-white/5 hover:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500/60 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span aria-hidden="true" className={isCapturing ? 'animate-spin' : ''}>↻</span>
+              </button>
+            )}
           </div>
-          <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-amber-100">
-            {JSON.stringify(conv.extractionLog, null, 2)}
-          </pre>
-        </section>
-      )}
+          {hasResult && conv && <CaptureStatus conv={conv} />}
+        </header>
+
+        {!hasResult && (
+          <PreCaptureView onCapture={capture} isCapturing={isCapturing} />
+        )}
+
+        {error && (
+          <div
+            role="alert"
+            className="rounded-r-md border-l-2 border-rose-500 bg-rose-500/5 px-3 py-2 text-[12px]"
+          >
+            <div className="font-medium text-rose-200">Couldn't capture this page</div>
+            <div className="mt-0.5 text-[11px] leading-relaxed text-neutral-300/90">{error}</div>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
+              {/* The Advanced > Storage > Clear All control is gated on hasResult,
+                  which is false on a fresh-install storage_full hit. Surface a
+                  contextual Clear here so the recovery path is one click away
+                  from the error itself. */}
+              {error.startsWith('storage_full') && (
+                <button
+                  type="button"
+                  onClick={handleClearStored}
+                  className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-rose-100 hover:bg-rose-500/20 focus:outline-none focus:ring-1 focus:ring-rose-400/60"
+                >
+                  Clear stored captures
+                  {storedCount !== null && storedCount > 0 ? ` (${storedCount})` : ''}
+                </button>
+              )}
+              {hasResult && (
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="text-neutral-400 hover:text-neutral-100"
+                >
+                  Dismiss
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {hasResult && conv && compressed && (
+          <>
+            {/* Result block — single raised surface, no border. The colored Copy
+                button is the only chromatic thing here, so it visually leads. */}
+            <section className="flex flex-col gap-3 rounded-lg bg-neutral-900/60 p-4">
+              <WarningStack warnings={warnings} />
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[12px] text-neutral-400">
+                  What should the next AI do? <span className="text-neutral-500">(optional)</span>
+                </span>
+                <textarea
+                  value={nextInstruction}
+                  onChange={(e) => setNext(e.target.value)}
+                  rows={2}
+                  placeholder="Blank repeats your last message"
+                  className={INPUT_CLASS}
+                />
+              </label>
+
+              {budget && <TokenBar totals={totals} budget={budget} compact />}
+
+              <CopyButton text={prompt} disabled={!prompt} />
+
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between text-[11px] text-neutral-500">
+                  <span>Transfer prompt</span>
+                  <button
+                    type="button"
+                    className="text-neutral-400 hover:text-neutral-100"
+                    onClick={openFullView}
+                  >
+                    open full view ↗
+                  </button>
+                </div>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => {
+                    // Editing the prompt directly is a power-user override; we
+                    // don't propagate it back into compressed state.
+                    useSidepanel.setState({ prompt: e.target.value });
+                  }}
+                  className="min-h-32 rounded-md border border-white/5 bg-neutral-950/40 p-3 font-mono text-[12px] leading-relaxed text-neutral-200 focus:border-blue-500/60 focus:outline-none"
+                />
+              </div>
+            </section>
+
+            {/* Budget-driven trim notice — renders nothing unless the prompt
+                had to drop older turns to fit the budget. Calm, not an alert. */}
+            <TrimNotice
+              compressed={compressed}
+              source={conv}
+              currentBudget={targetTokens}
+              onIncreaseBudget={handleIncreaseBudget}
+            />
+
+            {/* Disclosure list — flat rows on the canvas, hairline-separated.
+                Review and Advanced are visually demoted to "you can poke here
+                if you want." */}
+            <div className="divide-y divide-white/5 border-y border-white/5">
+              <DisclosureRow summary={`Review what's being sent — ${conv.messages.length} messages`}>
+                <div className="max-h-72 overflow-auto">
+                  <Timeline source={conv} compressed={compressed} debug={showDebug} />
+                </div>
+              </DisclosureRow>
+
+              <DisclosureRow
+                ref={advancedRef}
+                summary={strings.advancedSettings}
+                subtitle={strings.advancedSettingsSubtitle}
+                muted
+              >
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+                      {strings.settings}
+                    </div>
+                    {/* Vertical-stacked Settings. Drops the 2-col grid that
+                        caused inline labels to wrap at narrow widths. Each
+                        input is sized to its content rather than stretched. */}
+                    <div className="space-y-4">
+                      {/* Target */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1">
+                          <label
+                            htmlFor="target-select"
+                            className="cursor-pointer text-[12px] text-neutral-400"
+                          >
+                            {strings.target}
+                          </label>
+                          <HelpTip label={strings.target} text={strings.targetTip} />
+                        </div>
+                        <select
+                          id="target-select"
+                          value={target}
+                          onChange={(e) => setTarget(e.target.value as Platform)}
+                          className={`${INPUT_CLASS} max-w-[220px]`}
+                        >
+                          {listTransferTargets().map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.displayName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Keep recent messages */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1">
+                          <label
+                            htmlFor="keep-recent-input"
+                            className="cursor-pointer text-[12px] text-neutral-400"
+                          >
+                            {strings.keepRecentMessages}
+                          </label>
+                          <HelpTip
+                            label={strings.keepRecentMessages}
+                            text={strings.keepRecentTip}
+                          />
+                        </div>
+                        <input
+                          id="keep-recent-input"
+                          type="number"
+                          min={0}
+                          max={20}
+                          value={recentTurnsVerbatim}
+                          onChange={(e) => setRecent(Number(e.target.value))}
+                          className={`${INPUT_CLASS} no-spin w-20`}
+                        />
+                      </div>
+
+                      {/* Maximum prompt size, with inline "tokens" unit. The
+                          input frame is a flex container styled like an
+                          input; the real <input> has bg-transparent and the
+                          suffix span sits beside it. focus-within drives
+                          the focus ring on the container so the visual
+                          state matches a single field. */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1">
+                          <label
+                            htmlFor="max-prompt-input"
+                            className="cursor-pointer text-[12px] text-neutral-400"
+                          >
+                            {strings.maxPromptSize}
+                          </label>
+                          <HelpTip
+                            label={strings.maxPromptSize}
+                            text={strings.maxPromptSizeTip}
+                          />
+                        </div>
+                        <div className="flex w-44 items-center gap-2 rounded-md border border-white/5 bg-neutral-950/40 px-3 py-2 transition-colors focus-within:border-blue-500/60">
+                          <input
+                            id="max-prompt-input"
+                            ref={budgetInputRef}
+                            type="number"
+                            min={500}
+                            step={500}
+                            value={targetTokens}
+                            onChange={(e) => setTargetTokens(Number(e.target.value))}
+                            aria-describedby="max-prompt-unit"
+                            className="no-spin w-full bg-transparent text-[13px] text-neutral-100 placeholder:text-neutral-500 focus:outline-none"
+                          />
+                          <span
+                            id="max-prompt-unit"
+                            className="shrink-0 text-[11px] text-neutral-500"
+                          >
+                            {strings.tokensUnit}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <ComposeControls />
+
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+                      {strings.export}
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-neutral-500">
+                      {strings.exportSubtitle}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3 pt-0.5 text-[12px] text-neutral-300">
+                      <span className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => downloadFile('conversation.md', exportMarkdown(conv))}
+                          className="hover:text-neutral-100"
+                        >
+                          {strings.markdown}
+                        </button>
+                        <HelpTip
+                          label={strings.markdown}
+                          text={strings.markdownTip}
+                        />
+                      </span>
+                      <span aria-hidden="true" className="text-neutral-700">·</span>
+                      <span className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            downloadFile(
+                              'bundle.json',
+                              bundleToJson(
+                                buildBundle({
+                                  conversation: conv,
+                                  compressed,
+                                  warnings,
+                                })
+                              )
+                            )
+                          }
+                          className="hover:text-neutral-100"
+                        >
+                          {strings.jsonFile}
+                        </button>
+                        <HelpTip
+                          label={strings.jsonFile}
+                          text={strings.jsonFileTip}
+                        />
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+                        {strings.storage}
+                      </div>
+                      <HelpTip label={strings.storage} text={strings.storageTip} />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 text-[12px] text-neutral-400">
+                      <span>
+                        {storedCount === null
+                          ? strings.capturesStoredLoading
+                          : strings.capturesStored(storedCount)}
+                      </span>
+                      <span aria-hidden="true" className="text-neutral-700">·</span>
+                      <button
+                        type="button"
+                        onClick={handleClearStored}
+                        disabled={storedCount === 0 || storedCount === null}
+                        className="text-neutral-300 hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {strings.clearAll}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </DisclosureRow>
+            </div>
+          </>
+        )}
+
+        {showDebug && conv?.extractionLog && (
+          <section className="rounded-md border-l-2 border-amber-500 bg-amber-500/5 px-3 py-2 text-[11px]">
+            <div className="mb-1 flex items-center justify-between">
+              <strong className="text-amber-200">extraction log</strong>
+              <button
+                className="text-neutral-400 hover:text-neutral-100"
+                onClick={() => navigator.clipboard.writeText(JSON.stringify(conv.extractionLog, null, 2))}
+              >
+                copy
+              </button>
+            </div>
+            <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-amber-100/90">
+              {JSON.stringify(conv.extractionLog, null, 2)}
+            </pre>
+          </section>
+        )}
+      </div>
+    </HelpTipProvider>
+  );
+}
+
+function PreCaptureView({
+  onCapture,
+  isCapturing,
+}: {
+  onCapture: () => void;
+  isCapturing: boolean;
+}): JSX.Element {
+  return (
+    <div className="my-4 flex flex-col items-stretch gap-6">
+      <p className="px-2 text-center text-[13px] leading-relaxed text-neutral-400">
+        Open a conversation on ChatGPT, Claude, or Gemini, then click Capture.
+        You'll get a prompt to paste into any of the other AIs to continue
+        the conversation there.
+      </p>
+      <button
+        type="button"
+        onClick={onCapture}
+        disabled={isCapturing}
+        className="rounded-md bg-blue-500 px-3 py-3 text-[13px] font-medium text-white transition-colors hover:bg-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60 disabled:opacity-50"
+      >
+        {isCapturing ? 'Capturing…' : 'Capture current conversation'}
+      </button>
     </div>
   );
 }
+
+interface DisclosureRowProps {
+  summary: string;
+  /** Optional muted one-liner shown under the summary when expanded. */
+  subtitle?: string;
+  muted?: boolean;
+  children: React.ReactNode;
+}
+
+const DisclosureRow = React.forwardRef<HTMLDetailsElement, DisclosureRowProps>(
+  function DisclosureRow({ summary, subtitle, muted = false, children }, ref) {
+    return (
+      <details ref={ref} className="group">
+        <summary
+          className={`flex cursor-pointer list-none items-center gap-2 px-2 py-2.5 text-[13px] transition-colors hover:bg-white/[0.03] focus-visible:bg-white/5 focus-visible:outline-none ${
+            muted ? 'text-neutral-400' : 'text-neutral-200'
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className="inline-block w-3 text-[11px] text-neutral-500 transition-transform group-open:rotate-90"
+          >
+            ▸
+          </span>
+          <span className="truncate">{summary}</span>
+        </summary>
+        <div className="px-2 pb-3 pl-7">
+          {subtitle && (
+            <p className="mb-4 text-[11px] leading-relaxed text-neutral-500">
+              {subtitle}
+            </p>
+          )}
+          {children}
+        </div>
+      </details>
+    );
+  }
+);

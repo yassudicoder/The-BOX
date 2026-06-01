@@ -1,8 +1,9 @@
 import type { Adapter } from './Adapter';
 import { ChatGPTAdapter } from '../chatgpt/ChatGPTAdapter';
 import { ClaudeAdapter } from '../claude/ClaudeAdapter';
+import { GeminiAdapter } from '../gemini/GeminiAdapter';
 
-const adapters: Adapter[] = [new ChatGPTAdapter(), new ClaudeAdapter()];
+const adapters: Adapter[] = [new ChatGPTAdapter(), new ClaudeAdapter(), new GeminiAdapter()];
 
 export function resolveAdapter(url: URL): Adapter | null {
   for (const adapter of adapters) {

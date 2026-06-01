@@ -8,7 +8,10 @@ export class ChatGPTAdapter implements Adapter {
   readonly platform: Platform = 'chatgpt';
 
   matches(url: URL): boolean {
-    return url.hostname === 'chat.openai.com' || url.hostname === 'chatgpt.com';
+    // chat.openai.com no longer serves ChatGPT directly — it server-redirects
+    // to chatgpt.com. By the time the tab is interactable, the URL has
+    // settled at chatgpt.com. Match only the current canonical host.
+    return url.hostname === 'chatgpt.com';
   }
 
   async extract(ctx: ExtractContext): Promise<RawConversation> {

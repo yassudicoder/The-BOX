@@ -1,32 +1,61 @@
 /// <reference types="chrome" />
 import { register, startListening, sendToTab } from '../messaging/bus';
-import type { Conversation } from '../types/conversation';
 import type { Msg } from '../messaging/contracts';
 import { getStrategy } from '../pipeline/compress';
 import { buildTransferPrompt, defaultTransferOptions } from '../pipeline/transfer';
+import {
+  chromeLocalDriver,
+  loadConversation,
+  persistConversation,
+  sweepOrphans,
+} from './storage';
 
-const SUPPORTED_HOST_SUFFIXES = ['chat.openai.com', 'chatgpt.com', 'claude.ai'];
+const SUPPORTED_HOST_SUFFIXES = ['chatgpt.com', 'claude.ai', 'gemini.google.com'];
 const CONTENT_SCRIPT_FILE = 'content-script.js';
+
+const driver = chromeLocalDriver();
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
     .catch((err) => console.error('[bg] sidePanel setup failed', err));
+  // First-run heal: previous versions never evicted blobs when IDs fell
+  // off the index cap, so upgrading users may have accumulated orphans
+  // that are silently eating quota.
+  sweepOrphans(driver).catch((err) => console.error('[bg] orphan sweep on install failed', err));
 });
 
+// Service workers are ephemeral; onInstalled only fires on install/update.
+// Run a sweep once per worker lifetime before any persist so users whose
+// service worker restarts mid-day still get the heal applied.
+let sweptThisLifetime = false;
+async function ensureSwept(): Promise<void> {
+  if (sweptThisLifetime) return;
+  sweptThisLifetime = true;
+  try {
+    await sweepOrphans(driver);
+  } catch (err) {
+    console.error('[bg] orphan sweep failed', err);
+  }
+}
+
 register('EXTRACT_REQUEST', async (msg) => {
+  await ensureSwept();
   const reply = await extractWithInject(msg.tabId);
   if (!reply) {
     return { type: 'EXTRACT_ERROR', reason: 'unknown', detail: 'no reply from content script' };
   }
   if (reply.type === 'EXTRACT_RESULT') {
-    await persist(reply.conversation);
+    const result = await persistConversation(driver, reply.conversation);
+    if (!result.ok) {
+      return { type: 'EXTRACT_ERROR', reason: result.reason, detail: result.detail };
+    }
   }
   return reply;
 });
 
 register('BUILD_TRANSFER', async (msg) => {
-  const conv = await load(msg.conversationId);
+  const conv = await loadConversation(driver, msg.conversationId);
   if (!conv) {
     return {
       type: 'EXTRACT_ERROR',
@@ -138,21 +167,4 @@ function isSupportedUrl(rawUrl: string): boolean {
   } catch {
     return false;
   }
-}
-
-async function persist(conv: Conversation): Promise<void> {
-  const key = `conv:${conv.id}`;
-  await chrome.storage.local.set({ [key]: conv });
-  const indexRaw = await chrome.storage.local.get('conv:index');
-  const index: string[] = (indexRaw['conv:index'] as string[]) ?? [];
-  if (!index.includes(conv.id)) {
-    index.unshift(conv.id);
-    await chrome.storage.local.set({ 'conv:index': index.slice(0, 200) });
-  }
-}
-
-async function load(id: string): Promise<Conversation | null> {
-  const key = `conv:${id}`;
-  const raw = await chrome.storage.local.get(key);
-  return (raw[key] as Conversation | undefined) ?? null;
 }
