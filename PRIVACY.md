@@ -1,102 +1,93 @@
-# Privacy
+Privacy Policy for Continue AI
 
-Continue AI is built to be the simplest possible thing privacy-wise: a
-local-only tool. The extension itself sends nothing to any server. Your
-conversation only goes to another AI when you choose to send it there.
+Last updated: 2026-06-02
 
-## In plain language
+Continue AI is a browser extension that lets you move an AI chat
+conversation from one assistant (ChatGPT, Claude, or Gemini) to another,
+so you can continue it without copying and re-entering it by hand. This
+policy explains exactly what data the extension handles, and what it
+does not.
 
-- **Continue AI sends nothing.** The extension makes no network requests
-  of its own. There is no Continue AI server — yours or ours — for it to
-  send to.
-- **You choose where the prompt goes.** Your conversation only goes to
-  another AI when you choose to send it there. The extension prepares a
-  transfer prompt and, when you click Copy, places it on your clipboard.
-  Where it ends up is whichever AI you paste it into next.
-- **Captures live in Chrome's local storage on this computer.** They are
-  not synced to your other browsers and not sent anywhere.
-- **No accounts, no signups, no logins.** There is nothing to sign into
-  because there is no service behind the extension.
-- **No analytics, no telemetry, no crash reports.** The extension does
-  not measure usage, count clicks, or report errors back to anyone.
-- **No ads, no third-party SDKs.** No advertising code, no tracking code,
-  no data brokers.
-- **No remote code.** Every line of JavaScript the extension runs is
-  bundled into the package you install from the Chrome Web Store. The
-  extension does not download, evaluate, or execute code from the
-  internet.
-- **You can wipe everything.** Side panel → Advanced settings → Storage →
-  Clear all. That removes every captured conversation immediately.
-  Uninstalling the extension does the same.
+THE SHORT VERSION
 
-## What the extension reads
+Continue AI runs entirely on your device. It has no server, no account,
+and no telemetry. It does not track you and sends nothing to us or to
+any third party. Your conversation only goes to another AI when you
+choose to transfer it there.
 
-When you click Capture on a supported AI page (ChatGPT, Claude, Gemini),
-the extension reads the visible conversation from that page's DOM. That
-includes the messages, the conversation title, the model name, and the
-URL. It reads nothing else and runs on no other page.
+WHAT THE EXTENSION ACCESSES
 
-The supported hosts are:
+To do its job, Continue AI reads:
 
-- `chatgpt.com` — ChatGPT (the legacy `chat.openai.com` URL server-redirects
-  here; we do not request `chat.openai.com` permission)
-- `claude.ai` — Claude
-- `gemini.google.com` — Gemini
+- Personal communications and website content: the text of the AI
+  conversation on the page you are viewing (your messages and the
+  assistant's replies), so it can be captured and transferred.
+- Your settings: your preferences for how transfers work, such as the
+  destination AI and size limits.
 
-Pages on any other site are not read by this extension and are not
-eligible for capture.
+It accesses this only on the AI sites it supports — ChatGPT
+(chatgpt.com), Claude (claude.ai), and Gemini (gemini.google.com). It
+does not read or access any other website, your browsing history, your
+other tabs, your passwords or login credentials, your location, or any
+financial or health information.
 
-## What the extension writes
+HOW DATA IS USED AND STORED
 
-- **Chrome local storage** (`chrome.storage.local`) — captured
-  conversations are stored under per-conversation keys, capped at 50
-  conversations. When you exceed the cap the oldest is removed.
-- **Your downloads folder** — only when you click Export Markdown or
-  Export JSON file. Files go wherever Chrome saves your downloads.
-- **Your clipboard** — when you click "Copy prompt." The extension only
-  *writes* to the clipboard; it never reads from it.
+- Your conversation and settings are stored locally in your browser
+  (chrome.storage.local), on your own computer. They are not uploaded
+  anywhere.
+- The data is used only for the extension's single purpose: capturing,
+  compressing, and transferring your conversation to the AI you choose.
+- When you transfer a conversation, the extension places the transfer
+  prompt on your clipboard. You then paste it into the AI you want to
+  continue with. That destination service then handles the conversation
+  under its own privacy policy.
 
-Nothing is written to Chrome sync storage. Sync storage would mean your
-captures travel to your other signed-in browsers; that does not happen
-here.
+WHAT WE DO NOT DO
 
-## Technical specifics (for reviewers and the curious)
+- We do not collect, receive, or transmit your data to ourselves or any
+  third party. The extension has no backend server.
+- We do not sell or transfer your data to data brokers or any third
+  party, apart from the user-directed transfer described above.
+- We do not use your data for advertising, profiling, creditworthiness,
+  or lending.
+- We do not use your data for any purpose unrelated to the extension's
+  single purpose.
+- There is no analytics, telemetry, or tracking of any kind.
 
-These claims are verifiable by reading the source code:
+PERMISSIONS
 
-| Permission | Requested for | Where it's used in source |
-|---|---|---|
-| `storage`   | Save captured conversations; hydrate the full-tab workspace on open. | `chrome.storage.local.get/set` in `persistConversation()` / `loadConversation()` in [`src/background/storage.ts`](src/background/storage.ts); hydration read in [`src/fullview/App.tsx`](src/fullview/App.tsx). |
-| `sidePanel` | Open the side panel as the primary UI when the toolbar icon is clicked. | `chrome.sidePanel.setPanelBehavior` in [`src/background/index.ts`](src/background/index.ts). |
-| `scripting` | Inject the content script into a supported AI tab when you click Capture. | `chrome.scripting.executeScript` in [`src/background/index.ts`](src/background/index.ts). |
+Continue AI requests the minimum permissions needed: storage (to save
+your conversations and settings locally), sidePanel (to show the
+interface), and scripting plus access to the supported AI sites (to
+read the source conversation when you click Capture; the transfer
+prompt is then placed on your clipboard for you to paste into the
+destination AI yourself). The extension is also restricted by a content
+security policy that prevents it from making outbound network
+connections or running any code not included in the extension package.
 
-Notable absences: the extension does **not** request `tabs` (broad tab
-listing), `activeTab` (the four code paths that touch tabs are exercised
-only against the three supported hosts, which `host_permissions` already
-covers), `cookies`, `webRequest`, `webNavigation`, `history`, `bookmarks`,
-`<all_urls>` host access, or `clipboardRead`.
+REMOVING YOUR DATA
 
-### How the no-network claim is mechanically enforced
+You can clear your saved conversations and settings at any time from
+the extension's panel, or by removing the extension, which deletes its
+local data.
 
-The build fails if any of the following patterns appear anywhere in
-`src/` or `public/`:
+CHILDREN
 
-- `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `navigator.sendBeacon`
-- `chrome.storage.sync`
-- Remote font URLs (`.woff`, `.woff2`, `.ttf`, `.otf`, `.eot`) and any
-  reference to Google Fonts, Typekit, or Font Awesome
-- Analytics SDK names: Google Analytics, Google Tag Manager, Mixpanel,
-  Amplitude, Heap, Hotjar, FullStory, PostHog, Plausible, `analytics.js`,
-  Segment
-- The literal words `telemetry`, `trackEvent`, `recordMetric`, `beacon`
+Continue AI is a general productivity tool and is not directed to
+children under 13.
 
-The test that enforces this lives at
-[`tests/hardening/forbiddenPatterns.test.ts`](tests/hardening/forbiddenPatterns.test.ts).
-A single-line opt-out (`// hardening-allow: <reason>`) exists for cases
-where a forbidden word appears in copy or comments, but no such opt-out
-is currently in use.
+LIMITED USE
 
-## Contact
+The use of information received through Continue AI adheres to the
+Chrome Web Store User Data Policy, including the Limited Use
+requirements.
 
-If you find a privacy or security issue, please open an issue in the
-project repository.
+CHANGES
+
+We may update this policy; material changes will be reflected here with
+a new "last updated" date.
+
+CONTACT
+
+Questions about this policy: siddhesh2106@gmail.com
