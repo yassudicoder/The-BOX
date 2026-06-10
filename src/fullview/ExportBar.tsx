@@ -5,6 +5,7 @@ import type { Warning } from '../core/warnings';
 import { exportMarkdown } from '../export/markdown';
 import { buildBundle, bundleToJson } from '../export/json';
 import { exportHtml, type HtmlTemplate } from '../export/html';
+import { renderShareImage } from './shareImage';
 
 const FOOTER_BTN = 'text-[11px] text-neutral-400 hover:text-neutral-100';
 const MINI_INPUT =
@@ -38,14 +39,29 @@ export function ExportBar({ conv, compressed, warnings }: Props): JSX.Element {
 
   const name = (ext: string): string => `${(filename.trim() || defaultName).replace(/\.[a-z0-9]+$/i, '')}.${ext}`;
 
-  function download(file: string, content: string, mime: string): void {
-    const blob = new Blob([content], { type: mime });
+  const [busy, setBusy] = useState(false);
+
+  function downloadBlob(file: string, blob: Blob): void {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = file;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function download(file: string, content: string, mime: string): void {
+    downloadBlob(file, new Blob([content], { type: mime }));
+  }
+
+  async function saveImage(): Promise<void> {
+    setBusy(true);
+    try {
+      const blob = await renderShareImage(conv, { template });
+      if (blob) downloadBlob(name('png'), blob);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function printPdf(): void {
@@ -107,6 +123,14 @@ export function ExportBar({ conv, compressed, warnings }: Props): JSX.Element {
       </button>
       <button type="button" className={FOOTER_BTN} onClick={printPdf}>
         Save as PDF
+      </button>
+      <button
+        type="button"
+        className={FOOTER_BTN}
+        onClick={saveImage}
+        disabled={busy}
+      >
+        {busy ? 'Rendering…' : 'Save as image'}
       </button>
       <button
         type="button"
