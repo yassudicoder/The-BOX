@@ -8,6 +8,7 @@ import { ComposeControls } from '../sidepanel/components/ComposeControls';
 import { TokenBar } from '../sidepanel/components/TokenBar';
 import { WarningStack } from '../sidepanel/components/WarningBanner';
 import { CopyButton } from '../sidepanel/components/CopyButton';
+import { platformLabel, formatCapturedAt } from '../sidepanel/components/CaptureStatus.helpers';
 import { ExportBar } from './ExportBar';
 
 const INPUT_CLASS =
@@ -69,6 +70,8 @@ export function Workspace(): JSX.Element {
     );
   }
 
+  const capturedLabel = formatCapturedAt(conv.source.capturedAt);
+
   return (
     <div className="grid h-screen grid-cols-[1fr_440px] divide-x divide-white/5 bg-neutral-950 text-neutral-100">
       <main className="flex flex-col overflow-hidden">
@@ -78,7 +81,10 @@ export function Workspace(): JSX.Element {
               {conv.source.title ?? 'Conversation'}
             </div>
             <div className="mt-0.5 text-[11px] text-neutral-500">
-              {conv.source.platform} · {conv.stats.messageCount} msgs · ~{conv.stats.approxTokens.toLocaleString()} tokens
+              {platformLabel(conv.source.platform)}
+              {conv.source.model ? ` · ${conv.source.model}` : ''} · {conv.stats.messageCount} msgs · ~
+              {conv.stats.approxTokens.toLocaleString()} tokens
+              {capturedLabel ? ` · captured ${capturedLabel}` : ''}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">

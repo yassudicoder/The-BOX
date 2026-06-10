@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   captureStatusText,
+  formatCapturedAt,
   platformLabel,
 } from '../../src/sidepanel/components/CaptureStatus.helpers';
 
@@ -59,5 +60,49 @@ describe('captureStatusText', () => {
     });
     expect(text).toContain('ChatGPT');
     expect(text).not.toContain('chatgpt');
+  });
+
+  it('shows the model version in parentheses after the platform when known', () => {
+    expect(
+      captureStatusText({
+        platform: 'claude',
+        title: 'Explain monads',
+        messageCount: 4,
+        model: 'claude-opus-4',
+      })
+    ).toBe('Captured from Claude (claude-opus-4) · Explain monads');
+  });
+
+  it('omits the model parens when no model is present or it is blank', () => {
+    expect(captureStatusText({ platform: 'gemini', messageCount: 2, model: '  ' })).toBe(
+      'Captured from Gemini · 2 messages'
+    );
+  });
+
+  it('keeps the title-truncation budget independent of the model', () => {
+    const longTitle = 'A'.repeat(80);
+    const text = captureStatusText({
+      platform: 'claude',
+      title: longTitle,
+      messageCount: 4,
+      model: 'claude-opus-4',
+    });
+    // tail (the title) is still capped at 40 regardless of the model length
+    const tail = text.split(' · ')[1] ?? '';
+    expect(tail.length).toBeLessThanOrEqual(40);
+    expect(text.endsWith('…')).toBe(true);
+  });
+});
+
+describe('formatCapturedAt', () => {
+  it('formats a valid ISO timestamp to a short human-readable string', () => {
+    const out = formatCapturedAt('2026-06-10T14:30:00.000Z');
+    expect(out.length).toBeGreaterThan(0);
+    expect(out).not.toContain('T');
+    expect(out).not.toContain('Z');
+  });
+
+  it('returns an empty string for an unparseable value', () => {
+    expect(formatCapturedAt('not-a-date')).toBe('');
   });
 });
