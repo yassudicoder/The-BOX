@@ -8,14 +8,10 @@ import { ComposeControls } from '../sidepanel/components/ComposeControls';
 import { TokenBar } from '../sidepanel/components/TokenBar';
 import { WarningStack } from '../sidepanel/components/WarningBanner';
 import { CopyButton } from '../sidepanel/components/CopyButton';
-import { exportMarkdown } from '../export/markdown';
-import { buildBundle, bundleToJson } from '../export/json';
+import { ExportBar } from './ExportBar';
 
 const INPUT_CLASS =
   'rounded-md border border-white/5 bg-neutral-950/40 px-3 py-2 text-[13px] text-neutral-100 placeholder:text-neutral-500 focus:border-blue-500/60 focus:outline-none';
-
-const FOOTER_BTN =
-  'text-[11px] text-neutral-400 hover:text-neutral-100';
 
 /**
  * Full-tab workspace for large conversations. Two-column layout:
@@ -63,16 +59,6 @@ export function Workspace(): JSX.Element {
     })();
   }, [conv, hydrated, setConversation]);
 
-  function downloadFile(name: string, content: string): void {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   if (!conv || !compressed) {
     return (
       <div className="flex h-screen items-center justify-center px-6 text-center text-[13px] text-neutral-400">
@@ -96,28 +82,7 @@ export function Workspace(): JSX.Element {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            <button
-              type="button"
-              className={FOOTER_BTN}
-              onClick={() => downloadFile('conversation.md', exportMarkdown(conv))}
-            >
-              Export markdown
-            </button>
-            <span aria-hidden="true" className="text-neutral-700">·</span>
-            <button
-              type="button"
-              className={FOOTER_BTN}
-              onClick={() =>
-                downloadFile(
-                  'bundle.json',
-                  bundleToJson(
-                    buildBundle({ conversation: conv, compressed, warnings })
-                  )
-                )
-              }
-            >
-              Export JSON bundle
-            </button>
+            <ExportBar conv={conv} compressed={compressed} warnings={warnings} />
           </div>
         </header>
         <div className="flex-1 overflow-auto px-6 py-4">

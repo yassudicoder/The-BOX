@@ -19,7 +19,7 @@ Adding new platforms is out of scope for this phase unless explicitly re-scoped.
 
 ## Test status
 
-- 21 test files, 157 tests passing
+- 22 test files, 172 tests passing
 - Run with `npm test`
 - Tests include a forbidden-pattern scan over `src/` and `public/`:
   `tests/hardening/forbiddenPatterns.test.ts`
