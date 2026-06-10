@@ -4,8 +4,23 @@ import type { ExtractionLog } from './log';
  * All platforms the product knows about. Source-side support (extraction)
  * is a strict subset — see AdapterRegistry. Target-side support (transfer)
  * is broader because building a prompt is much cheaper than scraping a DOM.
+ *
+ * The first three have both extraction and transfer adapters. The rest are
+ * transfer-only today (you can send a conversation *into* them, but capturing
+ * *from* them is gated on real DOM fixtures — see PROJECT_STATE "Deferred").
  */
-export type Platform = 'chatgpt' | 'claude' | 'gemini';
+export type Platform =
+  | 'chatgpt'
+  | 'claude'
+  | 'gemini'
+  | 'deepseek'
+  | 'perplexity'
+  | 'copilot'
+  | 'grok'
+  | 'aistudio';
+
+/** Platforms we can extract (capture) from. A strict subset of Platform. */
+export type SourcePlatform = 'chatgpt' | 'claude' | 'gemini';
 export type Role = 'system' | 'user' | 'assistant' | 'tool';
 
 export type Block =
@@ -42,7 +57,7 @@ export interface ConversationStats {
 }
 
 export interface ConversationSource {
-  platform: Platform;
+  platform: SourcePlatform;
   url: string;
   title?: string;
   model?: string;

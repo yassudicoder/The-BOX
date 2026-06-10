@@ -49,6 +49,16 @@ export function displayName(platform: string): string {
       return 'Claude';
     case 'gemini':
       return 'Gemini';
+    case 'deepseek':
+      return 'DeepSeek';
+    case 'perplexity':
+      return 'Perplexity';
+    case 'copilot':
+      return 'Copilot';
+    case 'grok':
+      return 'Grok';
+    case 'aistudio':
+      return 'Google AI Studio';
     default:
       return platform;
   }

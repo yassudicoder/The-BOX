@@ -28,11 +28,49 @@ describe('transfer adapters registry', () => {
     const ids = listTransferTargets().map((a) => a.id);
     expect(ids).toEqual(expect.arrayContaining(['claude', 'chatgpt', 'gemini']));
   });
+  it('exposes the transfer-only targets (deepseek, perplexity, copilot, grok, aistudio)', () => {
+    const ids = listTransferTargets().map((a) => a.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(['deepseek', 'perplexity', 'copilot', 'grok', 'aistudio'])
+    );
+  });
   it('each adapter declares a sectionOrder and defaults', () => {
     for (const a of listTransferTargets()) {
       expect(a.sectionOrder.length).toBeGreaterThan(0);
       expect(a.defaults).toBeDefined();
     }
+  });
+  it('every registered adapter has a non-empty displayName', () => {
+    for (const a of listTransferTargets()) {
+      expect(a.displayName.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('transfer-only markdown targets', () => {
+  const conv = makeConvo([
+    { role: 'user', html: '<p>q</p>' },
+    { role: 'assistant', html: '<p>a</p>' },
+  ]);
+  const cc = structuralStrategy.compress(conv, {
+    targetTokens: 5000,
+    recentTurnsVerbatim: 2,
+    preserveCodeBlocks: true,
+  });
+
+  for (const target of ['deepseek', 'perplexity', 'copilot', 'grok', 'aistudio'] as const) {
+    it(`${target} renders markdown headers and a continuation`, () => {
+      const out = buildTransferPrompt(cc, conv, { target });
+      expect(out.target).toBe(target);
+      expect(out.prompt).toContain('## Continuation');
+      // markdown targets must not emit Claude-style XML wrappers
+      expect(out.prompt).not.toContain('<handoff');
+    });
+  }
+
+  it('perplexity uses its research-framed intro', () => {
+    const out = buildTransferPrompt(cc, conv, { target: 'perplexity' });
+    expect(out.prompt).toContain('answer the continuation');
   });
 });
 

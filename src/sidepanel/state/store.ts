@@ -28,6 +28,11 @@ export const TARGET_DEFAULT_BUDGETS: Record<Platform, number> = {
   chatgpt: 32_000,
   claude: 32_000,
   gemini: 64_000,
+  deepseek: 32_000,
+  perplexity: 16_000,
+  copilot: 16_000,
+  grok: 32_000,
+  aistudio: 64_000,
 };
 
 export interface SidepanelState {

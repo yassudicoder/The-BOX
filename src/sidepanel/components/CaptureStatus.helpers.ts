@@ -2,20 +2,20 @@
  * Pure helpers for CaptureStatus presentation. Split from the component so the
  * formatter can be tested without rendering.
  */
-import type { Platform } from '../../types/conversation';
+import type { SourcePlatform } from '../../types/conversation';
 
-const PLATFORM_LABEL: Record<Platform, string> = {
+const PLATFORM_LABEL: Record<SourcePlatform, string> = {
   chatgpt: 'ChatGPT',
   claude: 'Claude',
   gemini: 'Gemini',
 };
 
-export function platformLabel(p: Platform): string {
+export function platformLabel(p: SourcePlatform): string {
   return PLATFORM_LABEL[p];
 }
 
 export interface CaptureStatusInput {
-  platform: Platform;
+  platform: SourcePlatform;
   title?: string;
   messageCount: number;
 }

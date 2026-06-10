@@ -1,4 +1,4 @@
-import type { Platform, Role } from './conversation';
+import type { SourcePlatform, Role } from './conversation';
 
 export interface RawMessage {
   role: Role;
@@ -11,7 +11,7 @@ export interface RawMessage {
 }
 
 export interface RawConversation {
-  platform: Platform;
+  platform: SourcePlatform;
   url: string;
   title?: string;
   model?: string;

@@ -1,4 +1,5 @@
 import type { CompressedConversation, CompressedMessage } from '../compress/types';
+import type { Platform } from '../../types/conversation';
 import type { ComposeState } from '../transfer/buildPrompt';
 import { resolveTransferAdapter } from '../transfer/adapters';
 import { estimateTokens } from './estimate';
@@ -28,7 +29,7 @@ export interface TokenBudgetView {
 export function computeSectionTotals(
   cc: CompressedConversation,
   compose: ComposeState,
-  options: { target: 'chatgpt' | 'claude' | 'gemini'; continuation: string }
+  options: { target: Platform; continuation: string }
 ): SectionTotals {
   const adapter = resolveTransferAdapter(options.target);
   const olderIds = new Set(

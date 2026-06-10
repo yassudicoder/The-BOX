@@ -31,11 +31,32 @@ Adding new platforms is out of scope for this phase unless explicitly re-scoped.
 | ChatGPT  | yes (`src/adapters/chatgpt/ChatGPTAdapter.ts`) | yes (`src/pipeline/transfer/adapters/chatgpt.ts`) |
 | Claude   | yes (`src/adapters/claude/ClaudeAdapter.ts`)   | yes (`src/pipeline/transfer/adapters/claude.ts`)  |
 | Gemini   | yes (`src/adapters/gemini/GeminiAdapter.ts`)   | yes (`src/pipeline/transfer/adapters/gemini.ts`)  |
+| DeepSeek | no — needs DOM fixture | yes (`src/pipeline/transfer/adapters/deepseek.ts`) |
+| Perplexity | no — needs DOM fixture | yes (`src/pipeline/transfer/adapters/perplexity.ts`) |
+| Copilot  | no — needs DOM fixture | yes (`src/pipeline/transfer/adapters/copilot.ts`) |
+| Grok     | no — needs DOM fixture | yes (`src/pipeline/transfer/adapters/grok.ts`) |
+| Google AI Studio | no — needs DOM fixture | yes (`src/pipeline/transfer/adapters/aistudio.ts`) |
 
-`Platform` is a closed union in `src/types/conversation.ts`:
-`'chatgpt' | 'claude' | 'gemini'`. Both registries
-(`src/adapters/base/AdapterRegistry.ts` and
-`src/pipeline/transfer/adapters/index.ts`) cover all three.
+Extraction (capture-from) and transfer (paste-into) are now distinct type
+domains, matching the long-standing design comment that target-side support
+is broader than source-side:
+
+- `Platform` (`src/types/conversation.ts`) is the full union of every target
+  we can build a prompt for — all eight rows above.
+- `SourcePlatform` is the strict subset we can scrape — `'chatgpt' | 'claude'
+  | 'gemini'`. `RawConversation.platform` and `ConversationSource.platform`
+  are typed `SourcePlatform`, so a non-scrapable platform can never be set as
+  a capture origin by construction.
+
+The transfer registry (`src/pipeline/transfer/adapters/index.ts`) is a
+`Record<Platform, …>` and covers all eight. The extraction registry
+(`src/adapters/base/AdapterRegistry.ts`) is an array and covers only the
+three `SourcePlatform`s. The five transfer-only targets share one markdown
+rendering shape via `createMarkdownTarget`
+(`src/pipeline/transfer/adapters/markdownTarget.ts`); each platform file is a
+thin config. They add **no manifest host-permissions** — transfer builds a
+prompt the user pastes; it never injects into the target site — so
+`PRIVACY.md` and the manifest are unchanged.
 
 Host permissions matched against this table live in
 [`public/manifest.json`](public/manifest.json); ChatGPT covers two hostnames
@@ -45,9 +66,13 @@ Host permissions matched against this table live in
 
 Decisions explicitly punted out of the current phase:
 
-- **Additional platforms** (Grok, DeepSeek, Perplexity, Open WebUI, others).
-  The agreed approach is to ship a beta of the existing three first and let
-  user demand pick the next addition; no platform work happens speculatively.
+- **Extraction (capture-from) for the transfer-only platforms** (DeepSeek,
+  Perplexity, Copilot, Grok, Google AI Studio). Transfer *into* these shipped;
+  scraping *from* them is gated on real DOM fixtures, because the project
+  invariant requires fixture-driven testability for any DOM-reading code.
+  Each needs a saved-HTML snapshot of a real conversation before an
+  extraction adapter can be written and tested. Until then they are
+  transfer-only. Other platforms (Open WebUI, etc.) remain unscoped.
 - **Full accessibility audit**. Specific known gaps: `text-[10px]` sizing in
   several components; `text-neutral-500` on `bg-neutral-950` borderline pairs
   for some interactive elements; the 5-click debug-mode gesture is invisible
