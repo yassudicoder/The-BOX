@@ -1,6 +1,6 @@
 Privacy Policy for Continue AI
 
-Last updated: 2026-06-02
+Last updated: 2026-06-10
 
 Continue AI is a browser extension that lets you move an AI chat
 conversation from one assistant (ChatGPT, Claude, or Gemini) to another,
@@ -31,6 +31,12 @@ does not read or access any other website, your browsing history, your
 other tabs, your passwords or login credentials, your location, or any
 financial or health information.
 
+On those three supported sites, the extension automatically adds a small
+"Continue AI" button to the page so you can start a capture without
+opening the toolbar menu. Displaying this button does not read or send
+your conversation; the conversation is only read when you actually start
+a capture (by clicking that button or the toolbar icon).
+
 HOW DATA IS USED AND STORED
 
 - Your conversation and settings are stored locally in your browser
@@ -60,9 +66,9 @@ PERMISSIONS
 Continue AI requests the minimum permissions needed: storage (to save
 your conversations and settings locally), sidePanel (to show the
 interface), and scripting plus access to the supported AI sites (to
-read the source conversation when you click Capture; the transfer
-prompt is then placed on your clipboard for you to paste into the
-destination AI yourself). The extension is also restricted by a content
+display the in-page capture button, and to read the source conversation
+when you click Capture; the transfer prompt is then placed on your
+clipboard for you to paste into the destination AI yourself). The extension is also restricted by a content
 security policy that prevents it from making outbound network
 connections or running any code not included in the extension package.
 

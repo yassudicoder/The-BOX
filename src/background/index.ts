@@ -9,6 +9,7 @@ import {
   persistConversation,
   sweepOrphans,
 } from './storage';
+import { PENDING_CAPTURE_KEY, type PendingCapture } from '../messaging/pendingCapture';
 
 const SUPPORTED_HOST_SUFFIXES = ['chatgpt.com', 'claude.ai', 'gemini.google.com'];
 const CONTENT_SCRIPT_FILE = 'content-script.js';
@@ -75,6 +76,26 @@ register('BUILD_TRANSFER', async (msg) => {
   };
   const prompt = buildTransferPrompt(compressed, conv, options);
   return { type: 'BUILD_TRANSFER_RESULT', transferId: prompt.id, prompt: prompt.prompt };
+});
+
+register('CAPTURE_AND_OPEN', async (_msg, sender) => {
+  const tabId = sender.tab?.id;
+  if (tabId == null) {
+    return { type: 'CAPTURE_OPENED', panelOpened: false, detail: 'no sender tab' };
+  }
+  // Open the panel FIRST, before any await, so the user gesture that produced
+  // the click is still active (chrome.sidePanel.open requires it). If it's
+  // rejected, the pending flag below still lets a manual panel-open capture.
+  let panelOpened = false;
+  try {
+    await chrome.sidePanel.open({ tabId });
+    panelOpened = true;
+  } catch (err) {
+    console.warn('[bg] sidePanel.open failed (likely needs a user gesture)', err);
+  }
+  const pending: PendingCapture = { tabId, at: Date.now() };
+  await chrome.storage.local.set({ [PENDING_CAPTURE_KEY]: pending });
+  return { type: 'CAPTURE_OPENED', panelOpened };
 });
 
 startListening();

@@ -1,6 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Platform } from '../types/conversation';
 import type { Msg } from '../messaging/contracts';
+import {
+  PENDING_CAPTURE_KEY,
+  isPendingFresh,
+  type PendingCapture,
+} from '../messaging/pendingCapture';
 import { useSidepanel } from './state/store';
 import { listTransferTargets } from '../pipeline/transfer/adapters';
 import { Timeline } from './components/Timeline';
@@ -82,27 +87,65 @@ export function App(): JSX.Element {
     }, 0);
   }
 
-  async function capture(): Promise<void> {
-    setStatus('capturing');
-    setError(null);
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab?.id) throw new Error('no active tab');
-      const reply: Msg = await chrome.runtime.sendMessage({
-        type: 'EXTRACT_REQUEST',
-        tabId: tab.id,
-      });
-      if (reply.type === 'EXTRACT_RESULT') {
-        setConversation(reply.conversation);
-      } else if (reply.type === 'EXTRACT_ERROR') {
-        setError(`${reply.reason}${reply.detail ? `: ${reply.detail}` : ''}`);
+  const runCapture = useCallback(
+    async (tabId?: number): Promise<void> => {
+      setStatus('capturing');
+      setError(null);
+      try {
+        let id = tabId;
+        if (id == null) {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          id = tab?.id;
+        }
+        if (id == null) throw new Error('no active tab');
+        const reply: Msg = await chrome.runtime.sendMessage({
+          type: 'EXTRACT_REQUEST',
+          tabId: id,
+        });
+        if (reply.type === 'EXTRACT_RESULT') {
+          setConversation(reply.conversation);
+        } else if (reply.type === 'EXTRACT_ERROR') {
+          setError(`${reply.reason}${reply.detail ? `: ${reply.detail}` : ''}`);
+          setStatus('error');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
         setStatus('error');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setStatus('error');
-    }
-  }
+    },
+    [setStatus, setError, setConversation]
+  );
+
+  // UI handler: ignores the click event and captures the active tab.
+  const capture = useCallback((): void => {
+    void runCapture();
+  }, [runCapture]);
+
+  // Pick up a capture requested from the in-page button. The background writes
+  // a pending flag after opening the panel; we may be freshly mounted (read it
+  // once) or already open (react to the storage change).
+  useEffect(() => {
+    let cancelled = false;
+    const consume = async (): Promise<void> => {
+      const got = await chrome.storage.local.get(PENDING_CAPTURE_KEY);
+      const pending = got[PENDING_CAPTURE_KEY] as PendingCapture | undefined;
+      if (!isPendingFresh(pending, Date.now())) return;
+      await chrome.storage.local.remove(PENDING_CAPTURE_KEY);
+      if (!cancelled) void runCapture(pending.tabId);
+    };
+    void consume();
+    const onChanged = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      area: string
+    ): void => {
+      if (area === 'local' && changes[PENDING_CAPTURE_KEY]?.newValue) void consume();
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => {
+      cancelled = true;
+      chrome.storage.onChanged.removeListener(onChanged);
+    };
+  }, [runCapture]);
 
   function openFullView(): void {
     chrome.tabs.create({ url: chrome.runtime.getURL('src/fullview/index.html') });

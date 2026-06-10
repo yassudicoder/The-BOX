@@ -19,7 +19,7 @@ Adding new platforms is out of scope for this phase unless explicitly re-scoped.
 
 ## Test status
 
-- 24 test files, 188 tests passing
+- 26 test files, 199 tests passing
 - Run with `npm test`
 - Tests include a forbidden-pattern scan over `src/` and `public/`:
   `tests/hardening/forbiddenPatterns.test.ts`
@@ -61,6 +61,22 @@ prompt the user pastes; it never injects into the target site — so
 Host permissions matched against this table live in
 [`public/manifest.json`](public/manifest.json); ChatGPT covers two hostnames
 (`chat.openai.com` legacy and `chatgpt.com` current).
+
+### In-page capture button
+
+The manifest declares a `content_scripts` entry that auto-injects a tiny
+(~2.5 KB) button script (`src/content/button.ts`, built via crxjs) on the three
+capture-capable hosts. The button (`src/content/captureButton.ts`, a pure
+Shadow-DOM factory) lets the user start a capture from the chat page itself.
+On click it sends `CAPTURE_AND_OPEN`; the background opens the side panel and
+writes a `capture:pending` flag (`src/messaging/pendingCapture.ts`), which the
+panel consumes (on mount + `storage.onChanged`) to run its normal capture flow.
+
+This is the only auto-injected content script; the ~1.1 MB extraction script is
+still injected on demand by the background. The auto-injection is recorded in
+`PRIVACY.md`. Note: `chrome.sidePanel.open()` requires a user gesture — the
+background calls it first thing in the handler and falls back to the pending
+flag, so a manual panel-open still captures if the gesture is rejected.
 
 ## Dependencies
 

@@ -15,6 +15,17 @@
     "service_worker": "src/background/index.ts",
     "type": "module"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*"
+      ],
+      "js": ["src/content/button.ts"],
+      "run_at": "document_idle"
+    }
+  ],
   "side_panel": {
     "default_path": "src/sidepanel/index.html"
   },

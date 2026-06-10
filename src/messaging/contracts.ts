@@ -28,7 +28,12 @@ export type Msg =
       target: Platform;
       options: TransferOptions;
     }
-  | { type: 'BUILD_TRANSFER_RESULT'; transferId: string; prompt: string };
+  | { type: 'BUILD_TRANSFER_RESULT'; transferId: string; prompt: string }
+  // Sent by the in-page floating button (content script) on click. The
+  // background reads sender.tab.id, opens the side panel, and flags a pending
+  // capture for the panel to pick up.
+  | { type: 'CAPTURE_AND_OPEN' }
+  | { type: 'CAPTURE_OPENED'; panelOpened: boolean; detail?: string };
 
 export type MsgType = Msg['type'];
 export type MsgOf<T extends MsgType> = Extract<Msg, { type: T }>;
