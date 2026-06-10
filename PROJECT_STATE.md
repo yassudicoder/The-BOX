@@ -19,7 +19,7 @@ Adding new platforms is out of scope for this phase unless explicitly re-scoped.
 
 ## Test status
 
-- 23 test files, 184 tests passing
+- 24 test files, 188 tests passing
 - Run with `npm test`
 - Tests include a forbidden-pattern scan over `src/` and `public/`:
   `tests/hardening/forbiddenPatterns.test.ts`
@@ -62,6 +62,19 @@ Host permissions matched against this table live in
 [`public/manifest.json`](public/manifest.json); ChatGPT covers two hostnames
 (`chat.openai.com` legacy and `chatgpt.com` current).
 
+## Dependencies
+
+Runtime dependencies are kept lean; each must earn its place (engineering
+invariant). Notable additions:
+
+- **`jsPDF`** — powers one-click, full-conversation PDF export
+  (`src/export/pdf.ts`). Justification: a user explicitly required a reliable
+  PDF of the whole conversation. The prior browser-print approach could not
+  guarantee this (popup blockers, dialog cancellation, image-load timing).
+  jsPDF runs headlessly with no network and no DOM, so it preserves the
+  local-only invariant and stays unit-testable. It is imported only by the
+  `fullview` export page, never by the content script.
+
 ## Deferred decisions
 
 Decisions explicitly punted out of the current phase:
@@ -78,7 +91,10 @@ Decisions explicitly punted out of the current phase:
   for some interactive elements; the 5-click debug-mode gesture is invisible
   and not keyboard-reachable.
 - **Bundle-size reduction**. `dist/content-script.js` is ~1.1 MB. Build emits
-  a chunk-size warning. No code-splitting work scheduled.
+  a chunk-size warning. No code-splitting work scheduled. Separately, the
+  `fullview` page chunk is ~411 KB because it bundles `jsPDF` (see Dependencies
+  below); this is the export workspace page, loaded on demand, and does **not**
+  affect the content script injected into AI sites.
 - **Manifest description reconciliation**. `public/manifest.json` description
   still reads "between ChatGPT and Claude" and does not mention Gemini.
   Cosmetic; not blocking.

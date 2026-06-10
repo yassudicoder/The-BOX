@@ -5,6 +5,7 @@ import type { Warning } from '../core/warnings';
 import { exportMarkdown } from '../export/markdown';
 import { buildBundle, bundleToJson } from '../export/json';
 import { exportHtml, type HtmlTemplate } from '../export/html';
+import { exportPdf } from '../export/pdf';
 import { renderShareImage } from './shareImage';
 
 const FOOTER_BTN = 'text-[11px] text-neutral-400 hover:text-neutral-100';
@@ -64,24 +65,12 @@ export function ExportBar({ conv, compressed, warnings }: Props): JSX.Element {
     }
   }
 
-  function printPdf(): void {
-    const html = exportHtml(conv, { template, title: conv.source.title ?? filename });
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    const fire = () => {
-      try {
-        w.print();
-      } catch {
-        /* user can print manually if the auto-call is blocked */
-      }
-    };
-    // Wait for layout/images; onload covers most cases, the timeout is a fallback.
-    w.onload = fire;
-    w.setTimeout(fire, 400);
+  function savePdf(): void {
+    // Direct, dependency-backed PDF of the entire conversation — reliable and
+    // one-click (no print dialog that the user could cancel or a popup blocker
+    // could swallow).
+    const bytes = exportPdf(conv, { title: conv.source.title ?? filename });
+    downloadBlob(name('pdf'), new Blob([bytes], { type: 'application/pdf' }));
   }
 
   return (
@@ -121,7 +110,7 @@ export function ExportBar({ conv, compressed, warnings }: Props): JSX.Element {
       >
         Export HTML
       </button>
-      <button type="button" className={FOOTER_BTN} onClick={printPdf}>
+      <button type="button" className={FOOTER_BTN} onClick={savePdf}>
         Save as PDF
       </button>
       <button
