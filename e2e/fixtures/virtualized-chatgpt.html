@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Synthetic virtualized ChatGPT conversation</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      /* The scroll container the adapter detects (querySelector('main')). */
+      main {
+        height: 600px;
+        overflow: auto;
+        position: relative;
+        font:
+          14px -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      /* Spacer reserves full scroll height for ALL rows, even unmounted ones —
+         exactly how a windowed virtualizer keeps scrollHeight stable while only
+         a slice of rows is in the DOM. */
+      #spacer {
+        position: relative;
+        width: 100%;
+      }
+      article {
+        position: absolute;
+        left: 0;
+        right: 0;
+        box-sizing: border-box;
+        height: 80px;
+        padding: 8px 16px;
+        border-bottom: 1px solid #eee;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="scroller">
+      <div id="spacer"></div>
+    </main>
+    <script>
+      // ── Ground-truth transcript ───────────────────────────────────────────
+      // 120 alternating turns with stable ids, just like ChatGPT's
+      // data-message-id. The test reads window.__transcript to know the truth.
+      var N = 120;
+      var ROW = 80; // px per row (fixed-height virtualization)
+      var BUFFER = 2; // rows of overscan on each side
+      var transcript = [];
+      for (var i = 0; i < N; i++) {
+        var role = i % 2 === 0 ? 'user' : 'assistant';
+        transcript.push({
+          id: 'msg-' + i,
+          role: role,
+          text:
+            role === 'user'
+              ? 'User question number ' + i + '.'
+              : 'Assistant answer number ' + i + ' with some explanatory detail.',
+        });
+      }
+      window.__transcript = transcript;
+
+      var scroller = document.getElementById('scroller');
+      var spacer = document.getElementById('spacer');
+      spacer.style.height = N * ROW + 'px';
+
+      // Render only the rows inside the current viewport (+ overscan). Rows
+      // outside the window are REMOVED from the DOM — true windowed
+      // virtualization, so a naive snapshot at the top cannot see the tail.
+      function render() {
+        var top = scroller.scrollTop;
+        var vh = scroller.clientHeight || 600;
+        var first = Math.max(0, Math.floor(top / ROW) - BUFFER);
+        var last = Math.min(N - 1, Math.ceil((top + vh) / ROW) + BUFFER);
+
+        var existing = spacer.querySelectorAll('article');
+        for (var k = 0; k < existing.length; k++) existing[k].remove();
+
+        for (var idx = first; idx <= last; idx++) {
+          var m = transcript[idx];
+          var art = document.createElement('article');
+          art.setAttribute('data-message-author-role', m.role);
+          art.setAttribute('data-message-id', m.id);
+          art.style.top = idx * ROW + 'px';
+          var body = document.createElement('div');
+          // ChatGPT renders assistant turns in .markdown and user turns in
+          // .whitespace-pre-wrap — match both so the real adapter extracts them.
+          body.className = m.role === 'assistant' ? 'markdown' : 'whitespace-pre-wrap';
+          body.textContent = m.text;
+          art.appendChild(body);
+          spacer.appendChild(art);
+        }
+      }
+
+      scroller.addEventListener('scroll', render);
+      render();
+    </script>
+  </body>
+</html>

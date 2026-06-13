@@ -1,4 +1,4 @@
-import type { Conversation, Platform } from '../types/conversation';
+import type { Conversation, Platform, SourcePlatform } from '../types/conversation';
 import type { ExtractionErrorReason } from '../types/raw';
 
 export type CompressionStrategyId = 'structural' | 'llm-summary';
@@ -33,7 +33,19 @@ export type Msg =
   // background reads sender.tab.id, opens the side panel, and flags a pending
   // capture for the panel to pick up.
   | { type: 'CAPTURE_AND_OPEN' }
-  | { type: 'CAPTURE_OPENED'; panelOpened: boolean; detail?: string };
+  | { type: 'CAPTURE_OPENED'; panelOpened: boolean; detail?: string }
+  // Sent (debounced) by the opt-in context-meter content script with a local
+  // token estimate for the active conversation. The background resolves the
+  // window from the user's plan, sets the per-tab badge, and stores the reading
+  // for the side panel. Carries no message content — only counts.
+  | {
+      type: 'CONTEXT_USAGE';
+      platform: SourcePlatform;
+      usedTokens: number;
+      seenTurns: number;
+      expectedTurns: number;
+      hardWall: boolean;
+    };
 
 export type MsgType = Msg['type'];
 export type MsgOf<T extends MsgType> = Extract<Msg, { type: T }>;

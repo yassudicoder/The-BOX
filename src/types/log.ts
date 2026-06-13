@@ -4,6 +4,7 @@ export type ExtractionStep =
   | 'adapter_resolved'
   | 'scroll_pass'
   | 'scroll_complete'
+  | 'tail_recovery'
   | 'adapter_extract_start'
   | 'adapter_extract_done'
   | 'normalize_done'

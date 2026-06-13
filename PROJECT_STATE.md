@@ -72,11 +72,73 @@ On click it sends `CAPTURE_AND_OPEN`; the background opens the side panel and
 writes a `capture:pending` flag (`src/messaging/pendingCapture.ts`), which the
 panel consumes (on mount + `storage.onChanged`) to run its normal capture flow.
 
+Once captured, the side panel shows a quiet **Save a copy** row
+(`src/sidepanel/components/SaveCopyRow.tsx`) directly above the transfer card —
+one-click download chips for PDF, HTML, Image, Markdown, and JSON. Transfer
+(the Copy button) stays the only primary action; the row is the single home for
+file export (it was removed from `Advanced`, which now holds only content
+controls). The last-used format is remembered locally under the
+`export:lastFormat` key in `chrome.storage.local`.
+
 This is the only auto-injected content script; the ~1.1 MB extraction script is
 still injected on demand by the background. The auto-injection is recorded in
 `PRIVACY.md`. Note: `chrome.sidePanel.open()` requires a user gesture — the
 background calls it first thing in the handler and falls back to the pending
 flag, so a manual panel-open still captures if the gesture is rejected.
+
+### Capture completeness (L1 shipped / L2 gated)
+
+Extraction reads whatever is materialized in the live DOM, so long virtualized
+conversations risk dropping the oldest or most-recent turns. Two layers guard
+this; the canonical "incomplete" fact is `Conversation.stats.truncated`.
+
+- **L1 (shipped, permanent).** `scrollToLoadConversation` (`src/pipeline/extract.ts`)
+  scrolls to the top and tracks BOTH `scrollHeight` and the mounted-message count
+  each pass — declaring the load complete only when both stop changing
+  (`src/pipeline/completeness.ts`, happy-dom tested). If it never stabilizes, the
+  capture is flagged. The flag is surfaced everywhere from one fact: the panel
+  warning (`extraction_partial`), a note embedded in the transfer-prompt text, and
+  the PDF / HTML / Markdown exports + JSON bundle. (Previously `extraction_partial`
+  was defined but never emitted, and the flag only reached PDF/HTML.)
+- **L2 (gated, browser-only).** When L1 flags incomplete OR a cheap geometry check
+  shows unmounted content below the last visible message (the windowed-tail case
+  L1's top-of-list check can't see), `recoverTail` sweeps to the end re-collecting
+  via `adapter.collect(doc)` and merges by stable message id (`src/pipeline/merge.ts`,
+  never by position). Normal fully-mounted chats hit neither trigger, so the fast
+  path is untouched. After recovery the flag is honestly re-assessed. happy-dom
+  can't model windowed virtualization, so L2's gate is the Playwright suite in
+  `e2e/` plus the manual real-browser checklist (`e2e/README.md`) — run before
+  release; not yet validated on live platforms.
+
+### Context meter (opt-in, ships with the L2 release)
+
+An optional "tokens left" meter estimating how full the live conversation's
+context window is. **OFF by default** (`Settings.contextMeterEnabled`,
+`src/messaging/settings.ts`) — while off, no observer runs and behaviour is
+identical to v1.0.0.
+
+- **Pure core** (`src/core/context/`): `meter.ts` (model/plan→window map,
+  green/amber/red at 60%/85%, per-platform copy, badge colors) and `usage.ts`
+  (delta token accumulation keyed by stable message id; index-based estimate of
+  unmounted history — `(expectedTurns − seenTurns) × avgTokens/turn`). No DOM,
+  no chrome.*, fully unit-tested.
+- **Rides the L1 seam only.** The opt-in content script (`src/content/meter.ts`,
+  built to `dist/meter-content.js`, ~18 KB) reads the currently-mounted messages
+  via `adapter.collect` and a cheap char-based token estimate (no tokenizer in
+  the content bundle). Hard rule: it NEVER scrolls and NEVER invokes L2 — the
+  user's own scrolling enriches the estimate. A debounced MutationObserver
+  recounts; counting suspends on `visibilitychange` hidden.
+- **Injection is gated.** Background dynamically `registerContentScripts` the
+  meter only while enabled and unregisters + clears badges when disabled, so the
+  feature is truly zero-footprint when off. No new permissions/hosts.
+- **Surfaces:** per-tab `chrome.action` badge (color + %; Gemini is panel-only,
+  no badge) and a side-panel `ContextMeter`. Claude's own length warning is
+  detected and forces 100% red. A one-time nudge offers to enable the meter after
+  a capture on a chat estimated >50% full.
+- **Gated:** ships in the same release as L2, after the manual real-browser pass
+  (which also validates the live observer, per-tab badge, and Claude warning
+  selector — none of which happy-dom can exercise). The model→window numbers are
+  conservative estimates and easy to edit.
 
 ## Dependencies
 
@@ -88,13 +150,21 @@ invariant). Notable additions:
   PDF of the whole conversation. The prior browser-print approach could not
   guarantee this (popup blockers, dialog cancellation, image-load timing).
   jsPDF runs headlessly with no network and no DOM, so it preserves the
-  local-only invariant and stays unit-testable. It is imported only by the
-  `fullview` export page, never by the content script.
+  local-only invariant and stays unit-testable. It is imported by the side
+  panel's `Save a copy` row and the `fullview` export page — both
+  extension-page UIs — but never by the content script.
 
 ## Deferred decisions
 
 Decisions explicitly punted out of the current phase:
 
+- **L2 tail-recovery release gate.** The L2 windowed-tail recovery (see *Capture
+  completeness*) is implemented and gated behind `e2e/` (Playwright) + the manual
+  real-browser checklist in `e2e/README.md`. It is NOT yet validated on live
+  ChatGPT/Claude/Gemini virtualization. Before relying on it: install Playwright
+  (`npm install && npx playwright install chromium`), run `npm run test:e2e`, and
+  complete one manual 100+-turn pass per platform. L1's honest "incomplete" flag
+  ships regardless, so a not-yet-recovered tail is never silently dropped.
 - **Extraction (capture-from) for the transfer-only platforms** (DeepSeek,
   Perplexity, Copilot, Grok, Google AI Studio). Transfer *into* these shipped;
   scraping *from* them is gated on real DOM fixtures, because the project
@@ -107,10 +177,10 @@ Decisions explicitly punted out of the current phase:
   for some interactive elements; the 5-click debug-mode gesture is invisible
   and not keyboard-reachable.
 - **Bundle-size reduction**. `dist/content-script.js` is ~1.1 MB. Build emits
-  a chunk-size warning. No code-splitting work scheduled. Separately, the
-  `fullview` page chunk is ~411 KB because it bundles `jsPDF` (see Dependencies
-  below); this is the export workspace page, loaded on demand, and does **not**
-  affect the content script injected into AI sites.
+  a chunk-size warning. No code-splitting work scheduled. Separately, both the
+  side-panel and `fullview` page chunks bundle `jsPDF` (see Dependencies below)
+  to offer one-click PDF export; these are extension-page bundles loaded on
+  demand and do **not** affect the content script injected into AI sites.
 - **Manifest description reconciliation**. `public/manifest.json` description
   still reads "between ChatGPT and Claude" and does not mention Gemini.
   Cosmetic; not blocking.

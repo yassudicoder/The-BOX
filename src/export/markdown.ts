@@ -14,6 +14,10 @@ export function exportMarkdown(conv: Conversation): string {
   lines.push(`- Captured: ${conv.source.capturedAt}`);
   lines.push(`- Messages: ${conv.stats.messageCount}, ~${conv.stats.approxTokens} tokens`);
   lines.push('');
+  if (conv.stats.truncated) {
+    lines.push('> ⚠ This capture may be incomplete — some messages may be missing.');
+    lines.push('');
+  }
 
   for (const m of conv.messages) {
     lines.push(`## ${capitalize(m.role)}`);

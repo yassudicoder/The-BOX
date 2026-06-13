@@ -19,23 +19,11 @@ export class ChatGPTAdapter implements Adapter {
     if (ctx.signal.aborted) throw new ExtractionError('unknown', 'aborted');
 
     const doc = ctx.doc;
-    const messageEls = $$(doc, SELECTORS.message);
-    if (messageEls.length === 0) {
+    if ($$(doc, SELECTORS.message).length === 0) {
       throw new ExtractionError('selectors_missed', 'no [data-message-author-role] elements found');
     }
 
-    const messages: RawMessage[] = [];
-    for (const el of messageEls) {
-      const role = normalizeRole(el.getAttribute(SELECTORS.roleAttr));
-      if (!role) continue;
-      const content = pickContentElement(el);
-      if (!content) continue;
-      const html = content.innerHTML.trim();
-      if (!html) continue;
-      const sourceId = el.getAttribute(SELECTORS.messageIdAttr) ?? undefined;
-      messages.push({ role, html, sourceId });
-    }
-
+    const messages = this.collect(doc);
     if (messages.length === 0) {
       throw new ExtractionError('selectors_missed', 'role elements found but no content extracted');
     }
@@ -52,6 +40,25 @@ export class ChatGPTAdapter implements Adapter {
       messages,
       truncated,
     };
+  }
+
+  messageElements(doc: Document): Element[] {
+    return $$(doc, SELECTORS.message);
+  }
+
+  collect(doc: Document): RawMessage[] {
+    const messages: RawMessage[] = [];
+    for (const el of $$(doc, SELECTORS.message)) {
+      const role = normalizeRole(el.getAttribute(SELECTORS.roleAttr));
+      if (!role) continue;
+      const content = pickContentElement(el);
+      if (!content) continue;
+      const html = content.innerHTML.trim();
+      if (!html) continue;
+      const sourceId = el.getAttribute(SELECTORS.messageIdAttr) ?? undefined;
+      messages.push({ role, html, sourceId });
+    }
+    return messages;
   }
 
   probe(doc: Document): AdapterProbe {

@@ -6,7 +6,8 @@ import { exportMarkdown } from '../export/markdown';
 import { buildBundle, bundleToJson } from '../export/json';
 import { exportHtml, type HtmlTemplate } from '../export/html';
 import { exportPdf } from '../export/pdf';
-import { renderShareImage } from './shareImage';
+import { renderShareImage } from '../export/shareImage';
+import { sanitizeExportName } from '../export/filename';
 
 const FOOTER_BTN = 'text-[11px] text-neutral-400 hover:text-neutral-100';
 const MINI_INPUT =
@@ -34,7 +35,7 @@ interface Props {
  * which offers "Save as PDF". No PDF library is bundled.
  */
 export function ExportBar({ conv, compressed, warnings }: Props): JSX.Element {
-  const defaultName = useMemo(() => sanitizeName(conv.source.title ?? 'conversation'), [conv]);
+  const defaultName = useMemo(() => sanitizeExportName(conv.source.title ?? 'conversation'), [conv]);
   const [filename, setFilename] = useState(defaultName);
   const [template, setTemplate] = useState<HtmlTemplate>('highlight');
 
@@ -143,13 +144,4 @@ export function ExportBar({ conv, compressed, warnings }: Props): JSX.Element {
       </button>
     </div>
   );
-}
-
-function sanitizeName(raw: string): string {
-  const cleaned = raw
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, '')
-    .replace(/\s+/g, '-')
-    .slice(0, 60);
-  return cleaned || 'conversation';
 }

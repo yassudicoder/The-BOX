@@ -1,6 +1,6 @@
 Privacy Policy for Continue AI
 
-Last updated: 2026-06-10
+Last updated: 2026-06-12
 
 Continue AI is a browser extension that lets you move an AI chat
 conversation from one assistant (ChatGPT, Claude, or Gemini) to another,
@@ -37,6 +37,22 @@ opening the toolbar menu. Displaying this button does not read or send
 your conversation; the conversation is only read when you actually start
 a capture (by clicking that button or the toolbar icon).
 
+OPTIONAL CONTEXT METER
+
+Continue AI includes an optional "context meter" that estimates how full
+the current chat is relative to the AI's context window. It is OFF by
+default. While it is off, the extension does no continuous reading of the
+page at all.
+
+If you turn it on (in the panel's Advanced settings), the extension reads
+the text of the messages visible on the supported chat page to estimate
+their size. This estimation runs entirely on your computer: only a single
+running number (the estimated token count) is kept locally and shown to
+you in the toolbar badge and the side panel. The conversation text itself
+is never stored for the meter and never leaves your device. Counting pauses
+whenever the tab is not visible, and stops as soon as you turn the meter
+off. All meter numbers are approximate and labelled as estimates.
+
 HOW DATA IS USED AND STORED
 
 - Your conversation and settings are stored locally in your browser
@@ -68,9 +84,12 @@ your conversations and settings locally), sidePanel (to show the
 interface), and scripting plus access to the supported AI sites (to
 display the in-page capture button, and to read the source conversation
 when you click Capture; the transfer prompt is then placed on your
-clipboard for you to paste into the destination AI yourself). The extension is also restricted by a content
-security policy that prevents it from making outbound network
-connections or running any code not included in the extension package.
+clipboard for you to paste into the destination AI yourself). The
+scripting permission is also what injects the optional context-meter
+script — but only while you have that feature turned on. The extension is
+also restricted by a content security policy that prevents it from making
+outbound network connections or running any code not included in the
+extension package.
 
 REMOVING YOUR DATA
 

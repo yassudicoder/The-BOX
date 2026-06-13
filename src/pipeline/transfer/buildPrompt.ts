@@ -67,6 +67,14 @@ export function buildTransferPrompt(
   };
 
   const parts: string[] = [adapter.intro(ctx)];
+  // Carry the capture-completeness fact into the prompt text itself, so the
+  // receiving AI is told the history may be partial even if the user never
+  // reads the panel warning.
+  if (source.stats.truncated) {
+    parts.push(
+      'Note: this conversation capture may be incomplete — some earlier or more recent messages may be missing.'
+    );
+  }
   for (const section of adapter.sectionOrder) {
     const out = sectionRenderers[section]();
     if (out) parts.push(out);
@@ -83,6 +91,12 @@ export function buildTransferPrompt(
   const prompt = (parts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim() + '\n');
   const approxTokens = estimateTokens(prompt);
 
+  // Capture-level completeness warning. Surfaced here (the one warning producer)
+  // so it reaches the side panel and the JSON bundle's warnings; the PDF/HTML/
+  // Markdown exports independently note the same `truncated` fact.
+  if (source.stats.truncated) {
+    warnings.push(makeWarning('extraction_partial'));
+  }
   if (ctx.recent.length === 0) {
     warnings.push(makeWarning('digest_only'));
   }

@@ -28,9 +28,9 @@ const TAXONOMY: Record<WarningCode, Omit<Warning, 'code'>> = {
     severity: 'warning',
     title: 'Capture may be incomplete',
     explanation:
-      'Some earlier messages may not have been captured (the page may load older turns only on scroll).',
+      'Some messages may not have been captured. Long chats load turns only as you scroll, so the oldest or the most recent turns can be missed.',
     recommendedAction:
-      'Scroll to the very top of the source conversation and capture again.',
+      'Scroll through the whole conversation (top to bottom) so every turn loads, then capture again.',
   },
   low_confidence: {
     severity: 'warning',

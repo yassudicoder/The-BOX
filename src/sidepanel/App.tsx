@@ -17,9 +17,11 @@ import { CopyButton } from './components/CopyButton';
 import { TrimNotice } from './components/TrimNotice';
 import { nextBudgetTier } from './components/TrimNotice.helpers';
 import { HelpTip, HelpTipProvider } from './components/HelpTip';
+import { SaveCopyRow } from './components/SaveCopyRow';
+import { ContextMeter, MeterSettings, MeterNudge } from './components/ContextMeter';
+import { useMeter } from './state/useMeter';
+import { resolveContextWindow } from '../core/context/meter';
 import { strings } from './strings';
-import { exportMarkdown } from '../export/markdown';
-import { buildBundle, bundleToJson } from '../export/json';
 
 const INPUT_CLASS =
   'rounded-md border border-white/5 bg-neutral-950/40 px-3 py-2 text-[13px] text-neutral-100 placeholder:text-neutral-500 focus:border-blue-500/60 focus:outline-none';
@@ -48,6 +50,8 @@ export function App(): JSX.Element {
   const storedCount = useSidepanel((s) => s.storedCount);
   const refreshStoredCount = useSidepanel((s) => s.refreshStoredCount);
   const clearStoredCaptures = useSidepanel((s) => s.clearStoredCaptures);
+
+  const { settings, usage, setEnabled, setPlan, dismissNudge } = useMeter();
 
   const [showDebug, setShowDebug] = useState(false);
   const [titleClicks, setTitleClicks] = useState(0);
@@ -121,6 +125,12 @@ export function App(): JSX.Element {
     void runCapture();
   }, [runCapture]);
 
+  // Meter's red-state "Transfer now": copy the ready prompt, or capture first.
+  const onMeterTransfer = useCallback((): void => {
+    if (prompt) void navigator.clipboard.writeText(prompt);
+    else void runCapture();
+  }, [prompt, runCapture]);
+
   // Pick up a capture requested from the in-page button. The background writes
   // a pending flag after opening the panel; we may be freshly mounted (read it
   // once) or already open (react to the storage change).
@@ -151,18 +161,20 @@ export function App(): JSX.Element {
     chrome.tabs.create({ url: chrome.runtime.getURL('src/fullview/index.html') });
   }
 
-  function downloadFile(name: string, content: string): void {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   const isCapturing = status === 'capturing';
   const hasResult = conv !== null && compressed !== null;
+
+  // One-time meter nudge: only after a capture on a chat estimated to already
+  // fill >50% of its context window, and only until the user answers it once.
+  const meterWindow = conv
+    ? resolveContextWindow({ platform: conv.source.platform, plan: settings.plan }).window
+    : 0;
+  const showMeterNudge =
+    !settings.contextMeterEnabled &&
+    !settings.meterNudgeDismissed &&
+    hasResult &&
+    meterWindow > 0 &&
+    conv.stats.approxTokens / meterWindow > 0.5;
 
   return (
     <HelpTipProvider>
@@ -194,6 +206,14 @@ export function App(): JSX.Element {
           </div>
           {hasResult && conv && <CaptureStatus conv={conv} />}
         </header>
+
+        {settings.contextMeterEnabled && usage && (
+          <ContextMeter usage={usage} plan={settings.plan} onTransfer={onMeterTransfer} />
+        )}
+
+        {showMeterNudge && (
+          <MeterNudge onEnable={() => setEnabled(true)} onDismiss={dismissNudge} />
+        )}
 
         {!hasResult && (
           <PreCaptureView onCapture={capture} isCapturing={isCapturing} />
@@ -236,6 +256,11 @@ export function App(): JSX.Element {
 
         {hasResult && conv && compressed && (
           <>
+            {/* Quiet secondary action: download the capture as a file. Sits above
+                the transfer card so it's reachable right after capture, but the
+                Copy button below stays the only primary CTA. */}
+            <SaveCopyRow conv={conv} compressed={compressed} warnings={warnings} />
+
             {/* Result block — single raised surface, no border. The colored Copy
                 button is the only chromatic thing here, so it visually leads. */}
             <section className="flex flex-col gap-3 rounded-lg bg-neutral-900/60 p-4">
@@ -411,51 +436,9 @@ export function App(): JSX.Element {
 
                   <div className="space-y-1.5">
                     <div className="text-[11px] uppercase tracking-wide text-neutral-500">
-                      {strings.export}
+                      Context meter
                     </div>
-                    <p className="text-[11px] leading-relaxed text-neutral-500">
-                      {strings.exportSubtitle}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-3 pt-0.5 text-[12px] text-neutral-300">
-                      <span className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => downloadFile('conversation.md', exportMarkdown(conv))}
-                          className="hover:text-neutral-100"
-                        >
-                          {strings.markdown}
-                        </button>
-                        <HelpTip
-                          label={strings.markdown}
-                          text={strings.markdownTip}
-                        />
-                      </span>
-                      <span aria-hidden="true" className="text-neutral-700">·</span>
-                      <span className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            downloadFile(
-                              'bundle.json',
-                              bundleToJson(
-                                buildBundle({
-                                  conversation: conv,
-                                  compressed,
-                                  warnings,
-                                })
-                              )
-                            )
-                          }
-                          className="hover:text-neutral-100"
-                        >
-                          {strings.jsonFile}
-                        </button>
-                        <HelpTip
-                          label={strings.jsonFile}
-                          text={strings.jsonFileTip}
-                        />
-                      </span>
-                    </div>
+                    <MeterSettings settings={settings} onToggle={setEnabled} onPlan={setPlan} />
                   </div>
 
                   <div className="space-y-1.5">

@@ -10,9 +10,28 @@ import {
   sweepOrphans,
 } from './storage';
 import { PENDING_CAPTURE_KEY, type PendingCapture } from '../messaging/pendingCapture';
+import {
+  loadSettings,
+  normalizeSettings,
+  SETTINGS_KEY,
+} from '../messaging/settings';
+import { METER_USAGE_PREFIX, meterUsageKey, type MeterUsage } from '../messaging/meterUsage';
+import {
+  resolveContextWindow,
+  readMeter,
+  LEVEL_BADGE_COLOR,
+  type MeterReading,
+} from '../core/context/meter';
 
 const SUPPORTED_HOST_SUFFIXES = ['chatgpt.com', 'claude.ai', 'gemini.google.com'];
+const SUPPORTED_MATCHES = [
+  'https://chatgpt.com/*',
+  'https://claude.ai/*',
+  'https://gemini.google.com/*',
+];
 const CONTENT_SCRIPT_FILE = 'content-script.js';
+const METER_SCRIPT_ID = 'context-meter';
+const METER_SCRIPT_FILE = 'meter-content.js';
 
 const driver = chromeLocalDriver();
 
@@ -24,6 +43,17 @@ chrome.runtime.onInstalled.addListener(() => {
   // off the index cap, so upgrading users may have accumulated orphans
   // that are silently eating quota.
   sweepOrphans(driver).catch((err) => console.error('[bg] orphan sweep on install failed', err));
+  // Reconcile the opt-in context-meter injection with the persisted setting.
+  void reconcileMeterFromSettings();
+});
+
+// Re-register the meter on service-worker start (registration is persistent, so
+// this is idempotent) and react to the user toggling the setting.
+void reconcileMeterFromSettings();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes[SETTINGS_KEY]) return;
+  const enabled = normalizeSettings(changes[SETTINGS_KEY].newValue).contextMeterEnabled;
+  void reconcileMeter(enabled);
 });
 
 // Service workers are ephemeral; onInstalled only fires on install/update.
@@ -98,7 +128,97 @@ register('CAPTURE_AND_OPEN', async (_msg, sender) => {
   return { type: 'CAPTURE_OPENED', panelOpened };
 });
 
+register('CONTEXT_USAGE', async (msg, sender) => {
+  const tabId = sender.tab?.id;
+  if (tabId == null) return;
+  const settings = await loadSettings();
+  if (!settings.contextMeterEnabled) return; // raced with a disable — ignore
+  const { window: contextWindow } = resolveContextWindow({
+    platform: msg.platform,
+    plan: settings.plan,
+  });
+  const reading = readMeter(msg.usedTokens, contextWindow, msg.hardWall);
+  // Gemini is panel-only (no badge); the other two get a colored % badge.
+  if (msg.platform === 'gemini') await clearBadge(tabId);
+  else await setBadge(tabId, reading);
+  const usage: MeterUsage = {
+    tabId,
+    platform: msg.platform,
+    usedTokens: msg.usedTokens,
+    seenTurns: msg.seenTurns,
+    expectedTurns: msg.expectedTurns,
+    hardWall: msg.hardWall,
+    at: Date.now(),
+  };
+  await chrome.storage.local.set({ [meterUsageKey(tabId)]: usage });
+});
+
+// A closed tab's per-tab meter reading is dead weight — drop it.
+chrome.tabs.onRemoved.addListener((tabId) => {
+  void chrome.storage.local.remove(meterUsageKey(tabId));
+});
+
 startListening();
+
+async function setBadge(tabId: number, reading: MeterReading): Promise<void> {
+  try {
+    await chrome.action.setBadgeBackgroundColor({ tabId, color: LEVEL_BADGE_COLOR[reading.level] });
+    await chrome.action.setBadgeText({ tabId, text: `${reading.percent}%` });
+  } catch {
+    // Tab may have closed between the message and the badge write.
+  }
+}
+
+async function clearBadge(tabId: number): Promise<void> {
+  try {
+    await chrome.action.setBadgeText({ tabId, text: '' });
+  } catch {
+    /* tab gone */
+  }
+}
+
+async function reconcileMeterFromSettings(): Promise<void> {
+  const settings = await loadSettings();
+  await reconcileMeter(settings.contextMeterEnabled);
+}
+
+/**
+ * Register the opt-in meter content script when enabled (so it auto-injects on
+ * supported pages) and inject it into already-open tabs; unregister + clear
+ * badges when disabled. Idempotent — safe to call on every worker start.
+ */
+async function reconcileMeter(enabled: boolean): Promise<void> {
+  try {
+    const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [METER_SCRIPT_ID] });
+    const isRegistered = existing.length > 0;
+    if (enabled && !isRegistered) {
+      await chrome.scripting.registerContentScripts([
+        {
+          id: METER_SCRIPT_ID,
+          js: [METER_SCRIPT_FILE],
+          matches: SUPPORTED_MATCHES,
+          runAt: 'document_idle',
+        },
+      ]);
+      const tabs = await chrome.tabs.query({ url: SUPPORTED_MATCHES });
+      for (const t of tabs) {
+        if (t.id != null) {
+          chrome.scripting
+            .executeScript({ target: { tabId: t.id }, files: [METER_SCRIPT_FILE] })
+            .catch(() => {});
+        }
+      }
+    } else if (!enabled && isRegistered) {
+      await chrome.scripting.unregisterContentScripts({ ids: [METER_SCRIPT_ID] });
+      const tabs = await chrome.tabs.query({ url: SUPPORTED_MATCHES });
+      const usageKeys = tabs.filter((t) => t.id != null).map((t) => meterUsageKey(t.id as number));
+      if (usageKeys.length) await chrome.storage.local.remove(usageKeys);
+      for (const t of tabs) if (t.id != null) void clearBadge(t.id);
+    }
+  } catch (err) {
+    console.error('[bg] reconcileMeter failed', err);
+  }
+}
 
 async function extractWithInject(tabId: number): Promise<Msg | undefined> {
   const payload = { type: 'EXTRACT_REQUEST', tabId } as const;

@@ -23,10 +23,6 @@ export const strings = {
   includeSubtitle:
     'Choose which parts of the original conversation to bring along.',
 
-  export: 'Export',
-  exportSubtitle:
-    "Save the conversation as a file on your device instead of sending it straight to another AI.",
-
   storage: 'Storage',
   storageTip:
     "Saved conversations live in Chrome's local storage on this computer. Continue AI never uploads them.",
@@ -71,15 +67,6 @@ export const strings = {
   generatedFiles: 'Generated files',
   generatedFilesTip:
     'Code, documents, or other files created during the conversation.',
-
-  // ── Export section ────────────────────────────────────────────────────
-  markdown: 'Markdown',
-  markdownTip:
-    'A simple text format that keeps basic formatting like headings and lists. Opens in almost any notes or text app.',
-
-  jsonFile: 'JSON file',
-  jsonFileTip:
-    'A structured file that keeps every detail — best if you want to re-import it later or move it between tools.',
 
   // ── Storage section ───────────────────────────────────────────────────
   clearAll: 'Clear all',

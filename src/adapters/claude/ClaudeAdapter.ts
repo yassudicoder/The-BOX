@@ -16,7 +16,7 @@ export class ClaudeAdapter implements Adapter {
     if (ctx.signal.aborted) throw new ExtractionError('unknown', 'aborted');
 
     const doc = ctx.doc;
-    const messages = collectMessages(doc);
+    const messages = this.collect(doc);
 
     if (messages.length === 0) {
       throw new ExtractionError('selectors_missed', 'no Claude messages located');
@@ -32,6 +32,14 @@ export class ClaudeAdapter implements Adapter {
       messages,
       truncated,
     };
+  }
+
+  messageElements(doc: Document): Element[] {
+    return $$(doc, `${SELECTORS.userMessage}, ${SELECTORS.assistantMessage}`);
+  }
+
+  collect(doc: Document): RawMessage[] {
+    return collectMessages(doc);
   }
 
   probe(doc: Document): AdapterProbe {
@@ -54,10 +62,18 @@ function collectMessages(doc: Document): RawMessage[] {
   const out: RawMessage[] = [];
   if (turns.length > 0) {
     for (const turn of turns) {
+      // The turn container carries a unique, stable id (e.g.
+      // data-testid="conversation-turn-2"); the inner message nodes only carry
+      // CONSTANT testids ("user-message" / "conversation-turn-assistant"), which
+      // are useless as identities. Derive per-message ids from turn + role so
+      // L2's merge-by-id can actually de-duplicate across re-collections.
+      const turnKey = turn.getAttribute('data-testid') ?? turn.id ?? null;
       const userEl = turn.querySelector(SELECTORS.userMessage);
       const assistantEl = turn.querySelector(SELECTORS.assistantMessage);
-      if (userEl) out.push(messageFrom(userEl, 'user'));
-      if (assistantEl) out.push(messageFrom(assistantEl, 'assistant'));
+      if (userEl) out.push(messageFrom(userEl, 'user', turnKey ? `${turnKey}:user` : undefined));
+      if (assistantEl) {
+        out.push(messageFrom(assistantEl, 'assistant', turnKey ? `${turnKey}:assistant` : undefined));
+      }
     }
     if (out.length > 0) return out;
   }
@@ -65,18 +81,16 @@ function collectMessages(doc: Document): RawMessage[] {
   const flat = $$(doc, `${SELECTORS.userMessage}, ${SELECTORS.assistantMessage}`);
   for (const el of flat) {
     const role: Role = el.matches(SELECTORS.userMessage) ? 'user' : 'assistant';
-    out.push(messageFrom(el, role));
+    // Constant testids are useless as ids; prefer a real element id, else leave
+    // it unset and let the merge fall back to content + per-batch ordinal.
+    out.push(messageFrom(el, role, el.id || undefined));
   }
   return out;
 }
 
-function messageFrom(el: Element, role: Role): RawMessage {
+function messageFrom(el: Element, role: Role, sourceId?: string): RawMessage {
   const html = rewriteArtifacts(el).innerHTML.trim();
-  return {
-    role,
-    html,
-    sourceId: el.getAttribute('data-testid') ?? (el.id || undefined),
-  };
+  return { role, html, sourceId };
 }
 
 /**

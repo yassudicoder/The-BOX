@@ -16,7 +16,7 @@ export class GeminiAdapter implements Adapter {
     if (ctx.signal.aborted) throw new ExtractionError('unknown', 'aborted');
 
     const doc = ctx.doc;
-    const messages = collectMessages(doc);
+    const messages = this.collect(doc);
 
     if (messages.length === 0) {
       throw new ExtractionError('selectors_missed', 'no Gemini messages located');
@@ -32,6 +32,14 @@ export class GeminiAdapter implements Adapter {
       messages,
       truncated,
     };
+  }
+
+  messageElements(doc: Document): Element[] {
+    return $$(doc, `${SELECTORS.userMessage}, ${SELECTORS.assistantMessage}`);
+  }
+
+  collect(doc: Document): RawMessage[] {
+    return collectMessages(doc);
   }
 
   probe(doc: Document): AdapterProbe {
