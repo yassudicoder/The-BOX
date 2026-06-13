@@ -1,4 +1,5 @@
 import type { SourcePlatform } from '../types/conversation';
+import type { ClaudeQuota } from '../core/context/quota';
 
 /**
  * Latest context-meter reading the background stored for the side panel to
@@ -12,6 +13,24 @@ export const METER_USAGE_PREFIX = 'meter:usage';
 
 export function meterUsageKey(tabId: number): string {
   return `${METER_USAGE_PREFIX}:${tabId}`;
+}
+
+/**
+ * Claude EXACT usage reading, stored per tab under `${METER_QUOTA_PREFIX}:<tabId>`.
+ * Separate from MeterUsage because it has a different producer (a poll, not the
+ * DOM observer) and is Claude-only. Absence of the key = no exact data → the
+ * panel/badge fall back to the estimate.
+ */
+export const METER_QUOTA_PREFIX = 'meter:quota';
+
+export function meterQuotaKey(tabId: number): string {
+  return `${METER_QUOTA_PREFIX}:${tabId}`;
+}
+
+export interface MeterQuota {
+  quota: ClaudeQuota;
+  /** Epoch ms when this reading was fetched. */
+  at: number;
 }
 
 export interface MeterUsage {

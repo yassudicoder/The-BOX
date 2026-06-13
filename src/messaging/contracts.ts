@@ -1,5 +1,6 @@
 import type { Conversation, Platform, SourcePlatform } from '../types/conversation';
 import type { ExtractionErrorReason } from '../types/raw';
+import type { ClaudeQuota } from '../core/context/quota';
 
 export type CompressionStrategyId = 'structural' | 'llm-summary';
 
@@ -45,7 +46,13 @@ export type Msg =
       seenTurns: number;
       expectedTurns: number;
       hardWall: boolean;
-    };
+    }
+  // Sent (polled) by the opt-in meter content script on Claude only, carrying
+  // the user's OWN exact usage fractions read same-origin from claude.ai's
+  // /usage API. `quota: null` means the endpoint was unreachable or its shape
+  // changed — the background then drops any stored reading so the panel falls
+  // back to the estimate (never a stale "exact" number).
+  | { type: 'CLAUDE_QUOTA'; quota: ClaudeQuota | null };
 
 export type MsgType = Msg['type'];
 export type MsgOf<T extends MsgType> = Extract<Msg, { type: T }>;

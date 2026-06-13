@@ -15,7 +15,12 @@ import {
   normalizeSettings,
   SETTINGS_KEY,
 } from '../messaging/settings';
-import { METER_USAGE_PREFIX, meterUsageKey, type MeterUsage } from '../messaging/meterUsage';
+import {
+  meterUsageKey,
+  meterQuotaKey,
+  type MeterUsage,
+  type MeterQuota,
+} from '../messaging/meterUsage';
 import {
   resolveContextWindow,
   readMeter,
@@ -133,14 +138,6 @@ register('CONTEXT_USAGE', async (msg, sender) => {
   if (tabId == null) return;
   const settings = await loadSettings();
   if (!settings.contextMeterEnabled) return; // raced with a disable — ignore
-  const { window: contextWindow } = resolveContextWindow({
-    platform: msg.platform,
-    plan: settings.plan,
-  });
-  const reading = readMeter(msg.usedTokens, contextWindow, msg.hardWall);
-  // Gemini is panel-only (no badge); the other two get a colored % badge.
-  if (msg.platform === 'gemini') await clearBadge(tabId);
-  else await setBadge(tabId, reading);
   const usage: MeterUsage = {
     tabId,
     platform: msg.platform,
@@ -151,14 +148,62 @@ register('CONTEXT_USAGE', async (msg, sender) => {
     at: Date.now(),
   };
   await chrome.storage.local.set({ [meterUsageKey(tabId)]: usage });
+  await updateBadge(tabId);
 });
 
-// A closed tab's per-tab meter reading is dead weight — drop it.
+register('CLAUDE_QUOTA', async (msg, sender) => {
+  const tabId = sender.tab?.id;
+  if (tabId == null) return;
+  const settings = await loadSettings();
+  if (!settings.contextMeterEnabled) return;
+  if (msg.quota) {
+    const stored: MeterQuota = { quota: msg.quota, at: Date.now() };
+    await chrome.storage.local.set({ [meterQuotaKey(tabId)]: stored });
+  } else {
+    // Unavailable / shape changed — drop any prior reading so we never show a
+    // stale exact number; the panel + badge fall back to the estimate.
+    await chrome.storage.local.remove(meterQuotaKey(tabId));
+  }
+  await updateBadge(tabId);
+});
+
+// A closed tab's per-tab meter readings are dead weight — drop both.
 chrome.tabs.onRemoved.addListener((tabId) => {
-  void chrome.storage.local.remove(meterUsageKey(tabId));
+  void chrome.storage.local.remove([meterUsageKey(tabId), meterQuotaKey(tabId)]);
 });
 
 startListening();
+
+/**
+ * Recompute the toolbar badge for a tab from its stored readings. Claude's EXACT
+ * quota wins when available (it's the primary, exact meter); otherwise the
+ * context-window estimate drives it. Gemini is panel-only (no badge).
+ */
+async function updateBadge(tabId: number): Promise<void> {
+  const settings = await loadSettings();
+  if (!settings.contextMeterEnabled) {
+    await clearBadge(tabId);
+    return;
+  }
+  const got = await chrome.storage.local.get([meterUsageKey(tabId), meterQuotaKey(tabId)]);
+  const usage = got[meterUsageKey(tabId)] as MeterUsage | undefined;
+  const quota = got[meterQuotaKey(tabId)] as MeterQuota | undefined;
+  if (quota?.quota) {
+    // Exact session quota → readMeter against a window of 1 maps the 0..1
+    // fraction straight to percent + level.
+    await setBadge(tabId, readMeter(quota.quota.fiveHour.utilization, 1));
+    return;
+  }
+  if (!usage || usage.platform === 'gemini') {
+    await clearBadge(tabId);
+    return;
+  }
+  const { window: contextWindow } = resolveContextWindow({
+    platform: usage.platform,
+    plan: settings.plan,
+  });
+  await setBadge(tabId, readMeter(usage.usedTokens, contextWindow, usage.hardWall));
+}
 
 async function setBadge(tabId: number, reading: MeterReading): Promise<void> {
   try {
@@ -211,8 +256,10 @@ async function reconcileMeter(enabled: boolean): Promise<void> {
     } else if (!enabled && isRegistered) {
       await chrome.scripting.unregisterContentScripts({ ids: [METER_SCRIPT_ID] });
       const tabs = await chrome.tabs.query({ url: SUPPORTED_MATCHES });
-      const usageKeys = tabs.filter((t) => t.id != null).map((t) => meterUsageKey(t.id as number));
-      if (usageKeys.length) await chrome.storage.local.remove(usageKeys);
+      const keys = tabs
+        .filter((t) => t.id != null)
+        .flatMap((t) => [meterUsageKey(t.id as number), meterQuotaKey(t.id as number)]);
+      if (keys.length) await chrome.storage.local.remove(keys);
       for (const t of tabs) if (t.id != null) void clearBadge(t.id);
     }
   } catch (err) {

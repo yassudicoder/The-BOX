@@ -55,3 +55,28 @@ For each platform:
 Record platform + adapter `selectorVersion` (visible in the debug extraction
 log) with each manual pass, since virtualization is site-controlled and can
 regress on a vendor UI change.
+
+## Manual checklist — context meter (also gated, OFF by default)
+
+The meter's live observer, per-tab badge, Claude usage API, and the Claude
+length-warning detection can't be exercised in happy-dom. Verify by hand:
+
+1. **OFF = zero footprint.** With the meter toggle OFF, open a supported chat and
+   watch DevTools → Network: there must be **no `/usage` request**, no badge, and
+   no observer activity. Behaviour identical to the reviewed baseline.
+2. **Claude exact quota matches.** Enable the meter on Claude. The side-panel
+   **session %** must match Claude's own usage/settings page, and the **reset
+   countdown** must be correct (re-check after a few minutes — it ticks down).
+3. **Exact vs estimate is visible.** The quota fraction shows **no "~"**; the
+   context-window bar **does** ("~X%"). The "about N msgs left" is hedged.
+4. **Fallback fires.** In DevTools, block or 4xx the `/usage` request (or it
+   shape-changes): the exact quota meter must **disappear and fall back** to the
+   context estimate — **never** a stale/guessed exact number — and the failure is
+   logged.
+5. **Non-Claude has no quota meter.** On ChatGPT/Gemini the panel shows only the
+   context-window estimate; **no** session/quota meter appears.
+6. **Toggle off mid-session.** Turning the meter off stops `/usage` polling
+   immediately and clears the badge, without a page reload.
+
+`MODEL_BURN_RATES` (the "messages left" projection) is empirical and needs
+calibration against real sessions — note any large divergence during the pass.

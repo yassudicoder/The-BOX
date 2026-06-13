@@ -7,13 +7,20 @@ import {
   DEFAULT_SETTINGS,
   type Settings,
 } from '../../messaging/settings';
-import { meterUsageKey, type MeterUsage } from '../../messaging/meterUsage';
+import {
+  meterUsageKey,
+  meterQuotaKey,
+  type MeterUsage,
+  type MeterQuota,
+} from '../../messaging/meterUsage';
 import type { Plan } from '../../core/context/meter';
 
 interface MeterHook {
   settings: Settings;
-  /** Live usage for the panel's active tab, or null if none/stale. */
+  /** Live context-window estimate for the panel's active tab, or null if none. */
   usage: MeterUsage | null;
+  /** Live EXACT Claude quota for the active tab, or null if none/unavailable. */
+  quota: MeterQuota | null;
   setEnabled(enabled: boolean): void;
   setPlan(plan: Plan): void;
   dismissNudge(): void;
@@ -28,6 +35,7 @@ interface MeterHook {
 export function useMeter(): MeterHook {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [usage, setUsage] = useState<MeterUsage | null>(null);
+  const [quota, setQuota] = useState<MeterQuota | null>(null);
   const [activeTabId, setActiveTabId] = useState<number | null>(null);
 
   // Settings: load once and keep live, independent of which tab is active.
@@ -48,25 +56,30 @@ export function useMeter(): MeterHook {
     return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
 
-  // Usage: read ONLY this tab's per-tab key. Show nothing until the active tab
-  // id is known (no stale flash) and never react to other tabs' readings.
+  // Readings: read ONLY this tab's per-tab keys (context estimate + exact
+  // quota). Show nothing until the active tab id is known (no stale flash) and
+  // never react to other tabs' readings.
   useEffect(() => {
     if (activeTabId === null) {
       setUsage(null);
+      setQuota(null);
       return;
     }
-    const key = meterUsageKey(activeTabId);
+    const usageK = meterUsageKey(activeTabId);
+    const quotaK = meterQuotaKey(activeTabId);
     let cancelled = false;
-    const readUsage = async (): Promise<void> => {
-      const got = await chrome.storage.local.get(key);
-      if (!cancelled) setUsage((got[key] as MeterUsage | undefined) ?? null);
+    const read = async (): Promise<void> => {
+      const got = await chrome.storage.local.get([usageK, quotaK]);
+      if (cancelled) return;
+      setUsage((got[usageK] as MeterUsage | undefined) ?? null);
+      setQuota((got[quotaK] as MeterQuota | undefined) ?? null);
     };
-    void readUsage();
+    void read();
     const onChanged = (
       changes: Record<string, chrome.storage.StorageChange>,
       area: string
     ): void => {
-      if (area === 'local' && changes[key]) void readUsage();
+      if (area === 'local' && (changes[usageK] || changes[quotaK])) void read();
     };
     chrome.storage.onChanged.addListener(onChanged);
     return () => {
@@ -85,5 +98,5 @@ export function useMeter(): MeterHook {
     void saveSettings({ meterNudgeDismissed: true }).then(setSettings);
   }, []);
 
-  return { settings, usage, setEnabled, setPlan, dismissNudge };
+  return { settings, usage, quota, setEnabled, setPlan, dismissNudge };
 }

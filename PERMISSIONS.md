@@ -8,7 +8,11 @@ user can paste into another supported AI to continue the conversation
 there. Your conversation only goes to another AI when you choose to send
 it there. Every permission below is in service of that single purpose.
 The extension performs no other activity, observes no other pages, and
-sends no data anywhere.
+sends no data to its authors or any third party — it has no server. (The
+optional context meter, off by default, makes one kind of request: a
+same-origin read of your own usage data from claude.ai itself, described
+below. That request goes to claude.ai — the site you are already on —
+never to us.)
 
 ## Permissions and why they're requested
 
@@ -48,6 +52,30 @@ any other site.
 the extension sees is always `chatgpt.com`. Granting access to
 `chat.openai.com` would add a permission surface that the extension
 cannot actually use.
+
+## Optional context meter — Claude usage read (reviewer note)
+
+The optional context meter (OFF by default) shows how full your current
+chat is. On **Claude only**, when you turn it on, it reads your **own
+account usage** directly from claude.ai's own usage API
+(`GET /api/organizations/{id}/usage`) so it can show your real session and
+weekly usage instead of an estimate.
+
+- **No new permission is requested for this.** The request is **same-origin**
+  on `claude.ai`, which the content script already runs on under the existing
+  `https://claude.ai/*` host permission. The organization id is read from the
+  page's own `document.cookie` (the standard web API available to any script
+  on the page) — the extension does **not** request the `cookies` permission
+  and does not use the `chrome.cookies` API.
+- **What is read:** only *your own* usage figures (the same numbers Claude
+  already shows you), using your existing signed-in session.
+- **Why:** to render the opt-in usage/quota meter (session %, weekly %, reset
+  countdown, and an estimated messages-remaining figure).
+- **Where it goes:** nowhere. It is processed on your device and shown to you;
+  it is never stored long-term and never transmitted to the extension's
+  authors or any third party. There is no server.
+- **Gating:** this read happens only while the meter is enabled; turning the
+  meter off makes zero such requests.
 
 ## Why the extension does not request broader permissions
 

@@ -51,7 +51,7 @@ export function App(): JSX.Element {
   const refreshStoredCount = useSidepanel((s) => s.refreshStoredCount);
   const clearStoredCaptures = useSidepanel((s) => s.clearStoredCaptures);
 
-  const { settings, usage, setEnabled, setPlan, dismissNudge } = useMeter();
+  const { settings, usage, quota, setEnabled, setPlan, dismissNudge } = useMeter();
 
   const [showDebug, setShowDebug] = useState(false);
   const [titleClicks, setTitleClicks] = useState(0);
@@ -207,8 +207,13 @@ export function App(): JSX.Element {
           {hasResult && conv && <CaptureStatus conv={conv} />}
         </header>
 
-        {settings.contextMeterEnabled && usage && (
-          <ContextMeter usage={usage} plan={settings.plan} onTransfer={onMeterTransfer} />
+        {settings.contextMeterEnabled && (usage || quota?.quota) && (
+          <ContextMeter
+            usage={usage}
+            quota={quota}
+            plan={settings.plan}
+            onTransfer={onMeterTransfer}
+          />
         )}
 
         {showMeterNudge && (

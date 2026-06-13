@@ -10,15 +10,32 @@
  * and NEVER triggers L2 recovery. A debounced MutationObserver recounts on
  * change; counting is suspended whenever the tab is hidden. Only an integer
  * token estimate is ever sent — never message content.
+ *
+ * On Claude ONLY, it additionally polls the user's OWN exact usage from
+ * claude.ai's same-origin /usage API (credentialed fetch — no SSE tap, no
+ * MAIN-world injection). On any failure it reports the quota as unavailable so
+ * the panel falls back to the estimate; it never emits a stale exact number.
  */
 import { resolveAdapter } from '../adapters/base/AdapterRegistry';
 import { send } from '../messaging/bus';
 import { loadSettings, SETTINGS_KEY, normalizeSettings } from '../messaging/settings';
 import { emptyUsage, estimateUsage, updateUsage, type UsageState } from '../core/context/usage';
+import { parseUsageResponse, orgIdFromCookies } from '../core/context/quota';
 import { samplesFromRaw, detectHardWall } from './meterSamples';
 
 const DEBOUNCE_MS = 600;
+/** How often to poll Claude's /usage endpoint while the tab is visible. */
+const QUOTA_POLL_MS = 60_000;
 const SINGLETON_FLAG = '__continueAiMeterRunning';
+
+/** Best-effort read of Claude's currently-selected model (for the msgs-left estimate). */
+function inferClaudeModel(doc: Document): string | undefined {
+  const btn = doc.querySelector(
+    '[data-testid="model-selector-dropdown"], button[aria-label*="model" i]'
+  );
+  const label = btn?.textContent?.trim();
+  return label && label.length < 40 ? label : undefined;
+}
 
 function boot(): void {
   // Top frame only; never double-run.
@@ -34,7 +51,33 @@ function boot(): void {
 
   let usage: UsageState = emptyUsage();
   let timer: number | undefined;
+  let quotaTimer: number | undefined;
   let stopped = false;
+
+  // Claude EXACT quota: same-origin credentialed read of the user's own usage.
+  const pollQuota = async (): Promise<void> => {
+    if (stopped || platform !== 'claude' || document.visibilityState === 'hidden') return;
+    try {
+      const orgId = orgIdFromCookies(document.cookie);
+      if (!orgId) {
+        void send({ type: 'CLAUDE_QUOTA', quota: null }).catch(() => {});
+        return;
+      }
+      const res = await fetch(`/api/organizations/${encodeURIComponent(orgId)}/usage`, { // hardening-allow: same-origin read of the user's OWN Claude usage; credentialed, processed locally, never sent off-device (opt-in quota meter)
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error(`usage HTTP ${res.status}`);
+      const quota = parseUsageResponse(await res.json(), inferClaudeModel(document));
+      if (stopped) return; // disabled mid-fetch — don't emit after stop()
+      void send({ type: 'CLAUDE_QUOTA', quota }).catch(() => {});
+    } catch (err) {
+      if (stopped) return; // disabled mid-fetch — stay silent
+      // Undocumented endpoint — on any error/shape change, report unavailable so
+      // the panel falls back to the estimate. Never emit a stale exact number.
+      console.warn('[meter] Claude usage unavailable; falling back to estimate', err);
+      void send({ type: 'CLAUDE_QUOTA', quota: null }).catch(() => {});
+    }
+  };
 
   const recount = (): void => {
     if (stopped || document.visibilityState === 'hidden') return;
@@ -66,7 +109,10 @@ function boot(): void {
   observer.observe(root, { childList: true, subtree: true, characterData: true });
 
   const onVisibility = (): void => {
-    if (document.visibilityState === 'visible') schedule();
+    if (document.visibilityState === 'visible') {
+      schedule();
+      void pollQuota();
+    }
   };
   // Self-disable if the user turns the meter off without reloading the page.
   const onStorage = (
@@ -84,16 +130,25 @@ function boot(): void {
     document.removeEventListener('visibilitychange', onVisibility);
     chrome.storage.onChanged.removeListener(onStorage);
     if (timer !== undefined) window.clearTimeout(timer);
+    if (quotaTimer !== undefined) window.clearInterval(quotaTimer);
     w[SINGLETON_FLAG] = false;
   };
 
   document.addEventListener('visibilitychange', onVisibility);
   chrome.storage.onChanged.addListener(onStorage);
 
-  // First reading once, then on every (debounced) change.
+  // First reading once, then on every (debounced) change. On Claude, also start
+  // the exact-quota poll (immediate + interval). All gated on the opt-in toggle.
   void loadSettings().then((s) => {
-    if (s.contextMeterEnabled) recount();
-    else stop();
+    if (!s.contextMeterEnabled) {
+      stop();
+      return;
+    }
+    recount();
+    if (platform === 'claude') {
+      void pollQuota();
+      quotaTimer = window.setInterval(() => void pollQuota(), QUOTA_POLL_MS);
+    }
   });
 }
 

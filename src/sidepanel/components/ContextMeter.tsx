@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   resolveContextWindow,
   readMeter,
@@ -7,7 +7,8 @@ import {
   type Plan,
   type MeterLevel,
 } from '../../core/context/meter';
-import type { MeterUsage } from '../../messaging/meterUsage';
+import { estimateMessagesLeft, formatResetCountdown } from '../../core/context/quota';
+import type { MeterUsage, MeterQuota } from '../../messaging/meterUsage';
 import type { Settings } from '../../messaging/settings';
 
 const LEVEL_BAR: Record<MeterLevel, string> = {
@@ -23,33 +24,88 @@ const LEVEL_TEXT: Record<MeterLevel, string> = {
 
 const PLAN_LABEL: Record<Plan, string> = { free: 'Free', plus: 'Plus', pro: 'Pro' };
 
+function shortModel(model: string): string {
+  const m = model.toLowerCase();
+  if (m.includes('opus')) return 'Opus';
+  if (m.includes('sonnet')) return 'Sonnet';
+  if (m.includes('haiku')) return 'Haiku';
+  return model.length <= 16 ? model : 'Claude';
+}
+
+/** Tick `now` every 30s so reset countdowns stay live. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return now;
+}
+
+function Bar({ level, percent }: { level: MeterLevel; percent: number }): JSX.Element {
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+      <div
+        className={`h-1.5 ${LEVEL_BAR[level]} transition-[width] duration-300`}
+        style={{ width: `${Math.max(2, percent)}%` }}
+      />
+    </div>
+  );
+}
+
 /**
- * Side-panel context meter. Renders the pure reading from core (estimated
- * fullness of the live conversation's context window) with an "~" everywhere and
- * an estimate tooltip. Presentation-only — all math lives in core/context.
+ * EXACT Claude usage quota (session 5-hour primary + weekly). The fraction and
+ * reset are presented as exact (no "~"); only the messages-left projection is
+ * hedged with "about". All math lives in core/context/quota.
  */
-export function ContextMeter({
+function QuotaMeter({ quota, now }: { quota: MeterQuota['quota']; now: number }): JSX.Element {
+  const session = readMeter(quota.fiveHour.utilization, 1);
+  const weekly = readMeter(quota.sevenDay.utilization, 1);
+  const msgsLeft = estimateMessagesLeft(quota.fiveHour.utilization, quota.model);
+  const modelLabel = quota.model ? shortModel(quota.model) : '';
+  return (
+    <section className="flex flex-col gap-1.5 rounded-lg bg-neutral-900/40 p-3">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[12px] text-neutral-300">Session usage</span>
+        <span className={`text-[12px] tabular-nums ${LEVEL_TEXT[session.level]}`}>
+          {session.percent}% used
+        </span>
+      </div>
+      <Bar level={session.level} percent={session.percent} />
+      <div className="flex items-baseline justify-between text-[11px] text-neutral-400">
+        <span>resets in {formatResetCountdown(quota.fiveHour.resetsAtMs, now)}</span>
+        <span title="Approximate — burn rates are empirical and not exact.">
+          about {msgsLeft.toLocaleString()}{modelLabel ? ` ${modelLabel}` : ''} msgs left
+        </span>
+      </div>
+      <div className="mt-0.5 text-[11px] text-neutral-500">
+        Weekly: {weekly.percent}% used · resets in {formatResetCountdown(quota.sevenDay.resetsAtMs, now)}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * APPROXIMATE context-window fullness from the tokenizer estimate. Always
+ * carries a "~" and an estimate tooltip so it reads as distinct from the exact
+ * quota above.
+ */
+function ContextWindowMeter({
   usage,
   plan,
-  onTransfer,
 }: {
   usage: MeterUsage;
   plan: Plan;
-  onTransfer: () => void;
 }): JSX.Element {
-  const { window: contextWindow, basis } = resolveContextWindow({
-    platform: usage.platform,
-    plan,
-  });
+  const { window: contextWindow, basis } = resolveContextWindow({ platform: usage.platform, plan });
   const reading = readMeter(usage.usedTokens, contextWindow, usage.hardWall);
   const copy = meterCopy(usage.platform, reading.level);
   const basisLabel =
     basis === 'model' ? 'based on the detected model' : `based on your ${PLAN_LABEL[plan]} plan`;
-
   return (
-    <section className="flex flex-col gap-2 rounded-lg bg-neutral-900/40 p-3">
+    <section className="flex flex-col gap-1.5 rounded-lg bg-neutral-900/40 p-3">
       <div className="flex items-baseline justify-between">
-        <span className="text-[12px] text-neutral-300">Context used (estimated)</span>
+        <span className="text-[12px] text-neutral-300">Context window (estimated)</span>
         <span
           className={`text-[12px] tabular-nums ${LEVEL_TEXT[reading.level]}`}
           title={`~${usage.usedTokens.toLocaleString()} of ~${contextWindow.toLocaleString()} tokens, ${basisLabel}. All numbers are estimates.`}
@@ -57,14 +113,49 @@ export function ContextMeter({
           ~{reading.percent}%
         </span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
-        <div
-          className={`h-1.5 ${LEVEL_BAR[reading.level]} transition-[width] duration-300`}
-          style={{ width: `${Math.max(2, reading.percent)}%` }}
-        />
-      </div>
+      <Bar level={reading.level} percent={reading.percent} />
       <p className="text-[11px] leading-relaxed text-neutral-400">{copy.long}</p>
-      {copy.showTransferCta && (
+    </section>
+  );
+}
+
+/**
+ * Side-panel meter(s). On Claude with live quota it shows TWO legibly-split
+ * meters: the EXACT session/weekly quota and the APPROXIMATE context-window
+ * estimate. On other platforms — or when Claude's usage API is unavailable —
+ * only the context-window estimate is shown (no fake quota meter). A single
+ * Transfer CTA appears when either meter is in the red.
+ */
+export function ContextMeter({
+  usage,
+  quota,
+  plan,
+  onTransfer,
+}: {
+  usage: MeterUsage | null;
+  quota: MeterQuota | null;
+  plan: Plan;
+  onTransfer: () => void;
+}): JSX.Element | null {
+  const now = useNow();
+  if (!usage && !quota?.quota) return null;
+
+  const quotaRed = quota?.quota
+    ? readMeter(quota.quota.fiveHour.utilization, 1).level === 'red'
+    : false;
+  const contextRed = usage
+    ? readMeter(
+        usage.usedTokens,
+        resolveContextWindow({ platform: usage.platform, plan }).window,
+        usage.hardWall
+      ).level === 'red'
+    : false;
+
+  return (
+    <div className="flex flex-col gap-2">
+      {quota?.quota && <QuotaMeter quota={quota.quota} now={now} />}
+      {usage && <ContextWindowMeter usage={usage} plan={plan} />}
+      {(quotaRed || contextRed) && (
         <button
           type="button"
           onClick={onTransfer}
@@ -73,7 +164,7 @@ export function ContextMeter({
           Transfer now →
         </button>
       )}
-    </section>
+    </div>
   );
 }
 

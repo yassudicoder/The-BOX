@@ -132,13 +132,39 @@ identical to v1.0.0.
   meter only while enabled and unregisters + clears badges when disabled, so the
   feature is truly zero-footprint when off. No new permissions/hosts.
 - **Surfaces:** per-tab `chrome.action` badge (color + %; Gemini is panel-only,
-  no badge) and a side-panel `ContextMeter`. Claude's own length warning is
-  detected and forces 100% red. A one-time nudge offers to enable the meter after
-  a capture on a chat estimated >50% full.
-- **Gated:** ships in the same release as L2, after the manual real-browser pass
-  (which also validates the live observer, per-tab badge, and Claude warning
-  selector — none of which happy-dom can exercise). The model→window numbers are
-  conservative estimates and easy to edit.
+  no badge) and a side-panel `ContextMeter`. A one-time nudge offers to enable
+  the meter after a capture on a chat estimated >50% full.
+- **Claude EXACT quota (`src/core/context/quota.ts`).** On Claude the meter does
+  NOT estimate session/quota usage — it reads the user's real usage from
+  claude.ai's own `GET /api/organizations/{orgId}/usage` (orgId from the
+  `lastActiveOrg` cookie via `document.cookie`; same-origin credentialed fetch
+  from the existing content script — no SSE tap, no MAIN-world injection). The
+  parser normalizes both `resets_at` forms (ISO string or unix-epoch number → ms)
+  and both utilization scales (0–1 or 0–100 → 0–1). The panel shows TWO meters,
+  legibly split: an **exact** session+weekly quota (raw fraction + reset shown
+  with no "~"; an "about N msgs left" projection via `MODEL_BURN_RATES` is the
+  only hedged value) and the **approximate** context-window bar (tokenizer
+  estimate, always "~"). The badge prefers the exact quota on Claude.
+  - **This is the extension's one deliberate network call** — a same-origin read
+    of the user's OWN data on claude.ai, credentialed, never sent off-device. It
+    relaxes the "no outbound network" invariant for this opt-in path only,
+    documented inline with a `// hardening-allow:` opt-out and disclosed in
+    PRIVACY.md / PERMISSIONS.md. **No new permission/host** (existing
+    `claude.ai/*` host + `document.cookie`, not the `cookies` permission).
+  - **Resilience:** non-200, missing `five_hour`/`seven_day`, or any shape
+    mismatch → `parseUsageResponse` returns null → the quota reading is dropped
+    (never shown stale) and the panel/badge fall back to the estimate. The
+    failure is logged. The endpoint is undocumented and WILL change.
+- **Non-Claude (ChatGPT/Gemini):** no usage API exists → context-window estimate
+  only; no fake quota meter (explicit fallback).
+- **Gated:** ships in the same release as L2, after the manual real-browser pass.
+  Meter checks for that gate (also in `e2e/README.md`): the **live observer**,
+  **per-tab badge**, Claude **length-warning** behaviour, and specifically — the
+  exact session fraction **matches Claude's own usage page**, the **reset
+  countdown is correct**, and the **fallback fires** when `/usage` is blocked or
+  its shape changes. None of these are exercisable in happy-dom. The
+  model→window numbers and `MODEL_BURN_RATES` are empirical estimates needing
+  calibration and are easy to edit.
 
 ## Dependencies
 
